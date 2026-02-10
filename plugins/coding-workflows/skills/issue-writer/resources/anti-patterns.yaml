@@ -1,0 +1,86 @@
+# Anti-patterns for issue content validation
+# These patterns indicate implementation details that should not be in requirements
+
+code_blocks:
+  description: "Code blocks showing implementation"
+  patterns:
+    - '```(ruby|python|javascript|typescript|go|rust|java|swift|kotlin|sql)'
+    - '```(rb|py|js|ts|jsx|tsx)'
+    - 'class\s+\w+\s*(<|:|\{|\()'
+    - 'def\s+\w+\s*\('
+    - 'function\s+\w+\s*\('
+    - 'const\s+\w+\s*=\s*(async\s*)?\('
+  examples:
+    bad:
+      - "```ruby\nclass User < ApplicationRecord\n```"
+      - "def calculate_score(input)"
+    good:
+      - "The system should calculate user scores"
+
+specific_names:
+  description: "Specific class, method, or file names"
+  patterns:
+    - 'class\s+[A-Z]\w+'
+    - 'module\s+[A-Z]\w+'
+    - '(create|add|modify|update)\s+(the\s+)?`?\w+\.(rb|py|js|ts|go|rs)`?'
+    - 'in\s+`?\w+/([\w/]+)\.(rb|py|js|ts)`?'
+    - '(add|create|implement)\s+(a\s+)?`?\w+(Service|Controller|Model|Component|Handler)`?'
+  examples:
+    bad:
+      - "Add method `process` to `DataService`"
+      - "Create app/services/user_service.rb"
+    good:
+      - "Provide a data processing capability"
+
+numeric_estimates:
+  description: "Time or quantity estimates"
+  patterns:
+    - '\d+(-\d+)?\s*(hours?|days?|weeks?|minutes?)'
+    - '(takes?|requires?|estimated?|~|approximately)\s*\d+'
+    - '\d+\s*(files?|tests?|specs?|lines?|loc)'
+    - 'phase\s*\d+.*\(\d+.*\)'
+  examples:
+    bad:
+      - "Should take 4-6 hours"
+      - "Requires ~15 test files"
+      - "Phase 1 (2 hours): Setup"
+    good:
+      - "Should have comprehensive test coverage"
+
+implementation_phases:
+  description: "Phased implementation plans"
+  patterns:
+    - '(phase|step|stage)\s*\d+\s*:'
+    - '(first|second|third),?\s*(we|you)?\s*(will|should|need to)'
+    - '^\s*\d+\.\s*(create|add|implement|write|build)'
+  examples:
+    bad:
+      - "Phase 1: Create models"
+      - "First, we'll add the database migration"
+      - "1. Create the service class"
+    good:
+      - "The system should persist user data"
+
+hardcoded_values:
+  description: "Hardcoded configuration values"
+  patterns:
+    - '(set|use|default)\s+(to|of)\s+\d+'
+    - '(timeout|limit|max|min|threshold)\s*(=|:|\s+of)\s*\d+'
+    - '\d+\s*(ms|seconds?|minutes?|mb|gb|kb)'
+  examples:
+    bad:
+      - "Set timeout to 30 seconds"
+      - "Max retries: 3"
+    good:
+      - "Timeout should be configurable"
+      - "Should support configurable retry limits"
+
+# Severity levels for validation
+severity:
+  error:
+    - code_blocks
+    - specific_names
+  warning:
+    - numeric_estimates
+    - implementation_phases
+    - hardcoded_values

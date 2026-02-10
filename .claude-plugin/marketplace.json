@@ -1,0 +1,27 @@
+{
+  "name": "ai-coding-resources",
+  "owner": {
+    "name": "Kiwi Ventures"
+  },
+  "metadata": {
+    "description": "Engineering workflows and best practices for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "coding-workflows",
+      "source": "./plugins/coding-workflows",
+      "description": "Skills for writing better issues and encoding engineering best practices",
+      "version": "1.0.0",
+      "author": {
+        "name": "Kiwi Home"
+      },
+      "homepage": "https://github.com/Kiwi-Home/ai-coding-resources",
+      "repository": "https://github.com/Kiwi-Home/ai-coding-resources",
+      "license": "MIT",
+      "keywords": ["issue-writing", "engineering-workflows", "best-practices"],
+      "category": "productivity",
+      "tags": ["github-issues", "requirements", "claude-code"]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "coding-workflows",
+  "version": "1.0.0",
+  "description": "Engineering workflow commands for planning, reviewing, and executing GitHub issues with specialist agents.",
+  "author": {
+    "name": "Kiwi Home"
+  },
+  "homepage": "https://github.com/Kiwi-Home/ai-coding-resources",
+  "repository": "https://github.com/Kiwi-Home/ai-coding-resources",
+  "license": "MIT",
+  "keywords": [
+    "issue-writing",
+    "engineering-workflows",
+    "best-practices",
+    "issue-workflow",
+    "code-review",
+    "tdd",
+    "agent-teams"
+  ]
+}
