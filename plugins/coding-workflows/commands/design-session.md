@@ -1,5 +1,5 @@
 ---
-description: Run a technical design session with dynamically discovered specialist agents
+description: Run a technical design session on an issue, PR, file, or topic with dynamically discovered specialist agents
 args:
   subject:
     description: "Issue (#228), PR (#239), cross-repo (other-repo#10), file path, or topic description"

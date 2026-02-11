@@ -1,0 +1,14 @@
+{
+  "patterns": {
+    "reviewer": {
+      "required_sections": ["### Assessment", "### Verdict"]
+    },
+    "architect": {
+      "required_sections": ["### Confidence Assessment"]
+    },
+    "default": {
+      "required_sections": ["### Confidence Assessment"]
+    }
+  },
+  "min_output_length": 200
+}

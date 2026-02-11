@@ -1,5 +1,5 @@
 ---
-description: Full preparation pipeline - design session, plan, review, revised plan
+description: Full preparation pipeline - design session, plan, review, revised plan. Stops for human approval before execution.
 args:
   issue:
     description: "Issue number (e.g., 228) or full reference (e.g., other-repo#10)"

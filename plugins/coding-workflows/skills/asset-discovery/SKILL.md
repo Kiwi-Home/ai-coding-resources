@@ -81,6 +81,20 @@ This is asset-level comparison, not project-level. Each asset is evaluated again
 
 **Note on computation:** This staleness detection requires only comparing arrays and strings -- no cryptographic hashing. The LLM compares the asset's `domains` frontmatter against the domain list from the analysis output.
 
+### Tools-Comparison Staleness Detection
+
+When a self-match is detected for a generated agent, compare the agent's `tools` field against the current template tools (the template is defined in the generator command, e.g., `generate-assets`). The `tools` field may be a comma-separated string or a YAML array; both are normalized to a set before comparison.
+
+```
+Tools staleness signals (agents only, not skills):
+- Tools in template not in agent's `tools` list → stale (missing capabilities)
+- Tools in agent's `tools` list not in template → informational (user addition or template removal)
+- No explicit `tools` field → NOT stale (inherits all tools, superset of template)
+- Empty `tools` field → treat as absent (skip comparison)
+```
+
+Skills do not have a `tools` field and are not evaluated for tools staleness (agents only, not skills).
+
 ### Provenance Summary
 
 After the discovery table, present a provenance summary:
@@ -168,6 +182,7 @@ For command implementers referencing this skill — verify these when integratin
 - [ ] Inaccessible layers warned, not failed
 - [ ] Provenance state shown for project-layer assets
 - [ ] Domain-comparison staleness evaluated for generated self-matches
+- [ ] Tools-Comparison staleness evaluated for generated agent self-matches (agents only, not skills)
 - [ ] Reference integrity: agent `skills` frontmatter entries resolve to existing skills (project, user, or plugin layer). Unresolvable auto-populated refs are removed; unresolvable user-specified refs produce a warning. Dangling `skills` references are an additional staleness signal.
 
 ## Related Skills

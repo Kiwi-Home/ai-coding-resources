@@ -148,6 +148,7 @@ Before every commit:
 4. git push (if push fails, pull --rebase and retry up to 3x)
 
 ## TDD Workflow
+Read the `coding-workflows:tdd-patterns` skill for stack-appropriate test patterns.
 1. RED: Write test, confirm fails for right reason
 2. GREEN: Minimum implementation to pass
 3. REFACTOR: lint + typecheck, confirm still passing
