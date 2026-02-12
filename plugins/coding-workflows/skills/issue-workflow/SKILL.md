@@ -186,6 +186,8 @@ Only after Steps 1-3, draft the plan:
 - Feature flag: [yes/no]
 ```
 
+> **Tip**: Reference `coding-workflows:tdd-patterns` for stack-appropriate testing strategies when filling in the Testing Strategy section.
+
 **Note**: Backwards compatibility is NOT required unless explicitly requested in the issue.
 Prefer clean implementations over compatibility shims for pre-production projects.
 
@@ -383,12 +385,15 @@ These three criteria are the canonical set. If a deferral does not meet any of t
 
 **Do NOT stop after pushing. Enter the CI + review loop.**
 
+> **Hook enforcement:** The `execute-issue-completion-gate` Stop hook enforces the CI portion of this loop automatically. Review verdict enforcement requires `review_gate: true` in workflow.yaml (under `hooks.execute_issue_completion_gate`).
+
+<!-- SYNC: keep identical in execute-issue.md and issue-workflow SKILL.md Step 6 -->
 ```
 LOOP (max 3 iterations)
 
   1. Wait for CI: gh pr checks [PR_NUMBER] --watch
   2. If CI fails -> fix, commit, push, restart loop
-  3. Wait for review comment on PR
+  3. Wait for review: gh pr view [PR_NUMBER] --comments
   4. Check review verdict:
      - "Ready to merge" -> EXIT LOOP (success)
      - MUST FIX items -> fix ALL, push, restart loop
@@ -404,13 +409,28 @@ LOOP (max 3 iterations)
 
 **Stopping early is a workflow violation.**
 
+#### Two Distinct Signals
+
+This loop evaluates two categorically different signals. Do not conflate them.
+
+| Signal | Source | Mechanism | What It Proves |
+|--------|--------|-----------|----------------|
+| CI status | Machine | `gh pr checks` exit code | Code compiles, tests pass, linter passes |
+| Review verdict | Human or review agent | Structured PR comment content | Code is correct, complete, meets quality bar |
+
+CI passing is NECESSARY but NOT SUFFICIENT for merge readiness. A review bot's CI check passing means the bot ran successfully -- not that it found zero issues. The exit code tells you the job ran; the PR comment tells you the verdict.
+
+> **CRITICAL**: CI pass means proceed to review. It does NOT mean the PR is approved.
+
 #### Step 6a: Wait for CI
 
 If any check fails:
 1. Read the failure logs
 2. Fix the issue
 3. Commit and push
-4. Return to Step 6a
+4. **Stuck check:** Is this the same CI error failing after 2 fix-and-push cycles (per-phase counter)?
+   - **No**: Return to step 1 of Step 6a
+   - **Yes**: Read the `coding-workflows:systematic-debugging` skill and follow its protocol before the next push. If the skill is not available, escalate to human with diagnostic evidence. If the debugging protocol does not resolve the CI failure within 2 additional structured attempts, escalate to human with the skill's escalation report.
 
 **NO LINT BLAME-SHIFTING:**
 If linter fails, YOU fix it. Either:
@@ -419,7 +439,15 @@ If linter fails, YOU fix it. Either:
 
 #### Step 6b: Wait for Review
 
-After CI passes, wait for review comments on the PR.
+After CI passes, poll for review comments on the PR:
+
+```bash
+gh pr view [PR_NUMBER] --repo "{org}/{repo}" --comments --json comments
+```
+
+Look for comments containing review verdicts ("Ready to merge", MUST FIX, FIX NOW, or NEW ISSUE). Ignore CI bot status comments -- these are CI signals, not review verdicts (see Two Distinct Signals above).
+
+**Silence is not approval.** If no review comment has been posted yet, the review is still pending. Do not interpret the absence of review comments as implicit approval. Wait and re-poll.
 
 #### Step 6c: Process Review Findings
 
@@ -436,6 +464,10 @@ After CI passes, wait for review comments on the PR.
 - "Approved pending X" is NOT approval
 
 The ONLY valid exit is "Ready to merge" with ZERO blocking items.
+
+> Review verdicts follow the severity tiers and exit criteria defined in the
+> `coding-workflows:pr-review` skill. That skill is the single source of truth
+> for what "Ready to merge", MUST FIX, and FIX NOW mean.
 
 #### Step 6d: Iteration Limit
 
@@ -476,6 +508,7 @@ Reviewers SHOULD NOT overrule chair decisions or plan items based on "no consume
 - **Stopping after push**: Complete the CI + review loop
 - **Lint blame-shifting**: Own it or prove pre-existing with evidence
 - **Accepting qualified approvals**: Read carefully for conditions
+- **CI/Review conflation**: Treating CI pass as review approval (see [CI/Review Conflation](#cireview-conflation-the-exit-early-trap) below)
 - **Deviating silently**: Comment on issue when plan changes
 - **Silent deferrals / micro-issue sprawl**: Apply the Follow-Up Issue Threshold (see below)
 - **Merging without instruction**: Always wait for human
@@ -501,6 +534,31 @@ The correct behavior sits between two anti-patterns:
 - Refactoring a shared module that multiple services depend on
 - Adding a feature the chair recommended but that needs its own design
 - Migrating a data format that affects the entire codebase
+
+### CI/Review Conflation (The Exit-Early Trap)
+
+The correct behavior separates two gates: CI must pass (machine gate), THEN review must approve (human/agent gate).
+
+| Anti-Pattern | Signal | Cost |
+|--------------|--------|------|
+| **Exit on CI pass** | Agent sees `gh pr checks` exit 0, declares "all checks passing" and stops | Review findings ignored, bugs ship, review loop never entered |
+| **CI-as-approval** | Agent treats review bot's CI check "pass" as implicit approval | Bot ran successfully but posted MUST FIX findings in comments |
+
+**How it happens**: `gh pr checks --watch` returns exit code 0. The agent interprets this as "all checks passed, PR is ready" and either exits the loop or posts "Ready for merge" without reading review comments.
+
+**Why it's wrong**: A review bot runs as a CI job. Its CI status ("pass") means the bot executed without crashing -- not that it approved the code. The bot's VERDICT lives in the PR comment it posted, which may contain MUST FIX items despite the CI job reporting success.
+
+**The rule**: CI pass means proceed to review. Review verdict means proceed to merge decision. These are two separate gates — never skip the second because the first passed. See the Two Distinct Signals table in Step 6 for the full conceptual model.
+
+**Correct sequence**:
+1. `gh pr checks --watch` -> exit 0 -> CI gate passed
+2. Fetch PR comments -> find review comment -> parse verdict
+3. Verdict says "Ready to merge" with zero blocking items -> review gate passed
+4. BOTH gates passed -> post "Ready for merge. Awaiting human decision."
+
+**Wrong sequence**:
+1. `gh pr checks --watch` -> exit 0 -> "All checks passed!"
+2. Skip to "Ready for merge" (WRONG -- review verdict was never checked)
 
 ### Agent Team Pitfalls
 
@@ -537,6 +595,7 @@ The correct behavior sits between two anti-patterns:
 - [ ] PR created with issue reference
 - [ ] **ENTERED CI + REVIEW LOOP** (do NOT stop after push)
 - [ ] CI passing
+- [ ] **CI pass is not review approval** -- continued to review step (not stopped here)
 - [ ] Lint failures fixed
 - [ ] Review received
 - [ ] All blocking items addressed

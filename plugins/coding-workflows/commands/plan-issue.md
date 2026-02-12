@@ -1,5 +1,5 @@
 ---
-description: Plan implementation of a GitHub issue with dynamically discovered specialist input
+description: Draft a specialist-reviewed implementation plan (honors prior design-session decisions), then auto-chain into adversarial review
 args:
   issue:
     description: "Issue number (e.g., 228) or full reference (e.g., other-repo#10)"

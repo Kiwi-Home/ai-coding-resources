@@ -154,6 +154,11 @@ Strict bright-line rules with no exceptions:
 
 The ONLY valid approval is unqualified "Ready to merge" with zero blocking items.
 
+> **Note:** This skill defines the review verdict. CI status is a separate,
+> prerequisite signal -- not a substitute for review approval. See the CI/Review
+> Conflation anti-pattern in `coding-workflows:issue-workflow` for the Two
+> Distinct Signals model.
+
 ---
 
 ## CREATE ISSUE Protocol
@@ -254,7 +259,7 @@ anti_patterns:
 
 ## Cross-References
 
-- `coding-workflows:stack-detection` — ecosystem detection for project context resolution
-- `coding-workflows:issue-writer` — issue creation patterns (used by CREATE ISSUE protocol)
-- `coding-workflows:issue-workflow` — follow-up issue threshold (for deferred work tracking in reviewed PRs)
-- Plugin-validation skill — structural validation (this skill does NOT duplicate frontmatter or naming validation)
+- `coding-workflows:stack-detection` -- ecosystem detection for project context resolution
+- `coding-workflows:issue-writer` -- issue creation patterns (used by CREATE ISSUE protocol)
+- `coding-workflows:issue-workflow` -- follow-up issue threshold (deferred work tracking); CI/Review Conflation anti-pattern (CI pass is prerequisite, not substitute for review approval)
+- Plugin-validation skill -- structural validation (this skill does NOT duplicate frontmatter or naming validation)

@@ -47,6 +47,12 @@ deliberation:
   # When no overrides are configured, all conflicts default to LOW (single-round dispatch).
   conflict_overrides: []
 
+# Hook behavior overrides
+hooks:
+  execute_issue_completion_gate:
+    # escalation_threshold: 3    # Blocked-stop attempts before degrading to advisory
+    review_gate: false            # Set true if using automated PR review (/coding-workflows:review-pr)
+
 # --- Examples for other languages ---
 #
 # JavaScript/TypeScript:

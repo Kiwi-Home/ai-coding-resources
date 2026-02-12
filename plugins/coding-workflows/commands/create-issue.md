@@ -1,5 +1,5 @@
 ---
-description: Create a well-structured issue in your tracker
+description: Create a well-structured issue in your tracker (GitHub, Linear, Jira, Asana)
 allowed-tools:
   - Read
   - Grep

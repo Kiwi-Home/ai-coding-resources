@@ -1,5 +1,5 @@
 ---
-description: Adversarial review of an implementation plan - find problems before execution
+description: Adversarial review of an implementation plan; posts revised plan if blocking issues found
 args:
   issue:
     description: "Issue number (e.g., 228) or full reference (e.g., other-repo#10)"

@@ -1,5 +1,5 @@
 ---
-description: Review a pull request for quality, compliance, and merge readiness
+description: Review a pull request for quality, compliance, and merge readiness using severity-tiered findings
 args:
   pr:
     description: "PR number (e.g., 42) or full reference (e.g., other-repo#10)"

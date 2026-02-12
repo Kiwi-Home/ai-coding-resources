@@ -485,7 +485,7 @@ Before writing each file, apply the three-tier classification from the `coding-w
 
 1. **Self-match with provenance branching:** If `.claude/agents/{name}.md` already exists at the exact output path:
    1. Read provenance fields (`generated_by`, `generated_at`) from existing file's frontmatter
-   2. If generated: compare existing asset's `domains` array against current analysis domains for staleness (see `coding-workflows:asset-discovery` skill's Domain-Comparison Staleness Detection)
+   2. If generated: compare existing asset's `domains` array against current analysis domains for staleness (see `coding-workflows:asset-discovery` skill's Domain-Comparison Staleness Detection). Also compare existing asset's `tools` field against current template tools for tools staleness (agents only, not skills — see `coding-workflows:asset-discovery` skill's Tools-Comparison Staleness Detection).
    3. Branch to appropriate UX:
 
    | # | State | UX |
@@ -497,6 +497,9 @@ Before writing each file, apply the three-tier classification from the `coding-w
    **Error paths:**
    - Frontmatter unparseable: treat as manually created
    - `generated_by` present but `domains` array empty/missing: skip staleness detection, offer "Update or skip?"
+   - `tools` field absent: skip tools staleness (agent inherits all)
+   - `tools` field empty string: treat as absent (skip tools staleness)
+   - `tools` field is YAML list: normalize to set for comparison (same as comma-separated)
 
    **Staleness summary format:**
    ```
@@ -511,8 +514,18 @@ Before writing each file, apply the three-tier classification from the `coding-w
      Framework changed:
      ~ {old} -> {new}
 
+     Tools out of sync with current template:
+     + {tool} (in template, missing from agent)
+     - {tool} (in agent, not in current template)
+
      [Update / Skip / Show full proposed content]
    ```
+
+   **Tools staleness notes:**
+   - The `+` lines are actioned during update (added via set-union). The `-` lines are informational only (user-added tools are preserved, template-removed tools are flagged for user awareness).
+   - Users may edit `tools` freely. Template removals do NOT automatically propagate to existing agents. See `coding-workflows:agent-patterns` for `tools` field semantics and `coding-workflows:asset-discovery` for staleness signal definitions.
+
+   **Update behavior for tools:** When the "Update" action is chosen for a stale agent, tools are merged via set-union: `updated_tools = existing_tools | template_tools`. This adds missing template tools while preserving user-added tools.
 
 2. **BLOCK:** If exact name matches an existing agent in any layer, warn and offer rename.
 3. **WARN:** If similarity threshold exceeded, confirm user's choice.
@@ -524,7 +537,7 @@ Before writing each file, apply the three-tier classification from the `coding-w
 ---
 name: {domain}-reviewer
 description: "Reviews {domain} code for {framework} patterns and project conventions"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
 domains: [{domain keywords}]
 skills: [{matching skill names}]
 role: {reviewer or architect}
@@ -558,6 +571,8 @@ Decisions that are NOT up for debate:
 {analysis_path: matching project + plugin skills with brief context}
 {fallback_path: matching plugin skills only}
 ```
+
+**`tools` field note:** The default template includes `Bash` to enable execution dispatch (running test suites, linters, and build commands via `/coding-workflows:execute-issue`). `SendMessage`, `TaskUpdate`, and `TaskList` support team coordination when agents are dispatched in multi-agent workflows. The explicit `tools` list (rather than omitting the field) enables staleness detection and documents the agent's intended capabilities. See `coding-workflows:agent-patterns` for tool configuration patterns distinguishing review-only from execution-capable agents.
 
 ### Domain-Specific Keywords
 

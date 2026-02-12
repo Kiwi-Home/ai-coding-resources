@@ -1,5 +1,5 @@
 ---
-description: Bootstrap project configuration for coding workflow commands
+description: Bootstrap workflow.yaml by auto-detecting project settings
 allowed-tools:
   - Read
   - Grep
@@ -18,7 +18,7 @@ Bootstrap `.claude/workflow.yaml` for this project by auto-detecting settings an
 
 Use the Read tool to read `.claude/workflow.yaml`.
 
-- **If file exists:** Show the current config and ask: "Configuration already exists. Do you want to update it?" If no, stop.
+- **If file exists:** Show the current config. Run review automation detection from Step 2e. If the detection result differs from the current `review_gate` value, include it in a drift report (e.g., "Review automation detected in CI workflows but `review_gate` is currently `false`. Update?"). Ask: "Configuration already exists. Do you want to update it?" If no, stop.
 - **If file does not exist:** Continue to Step 2.
 
 ---
@@ -69,6 +69,21 @@ Check for monorepo indicators:
 If monorepo detected:
 > "This appears to be a monorepo. Monorepo support is planned for v2. For now, configure for your primary service directory."
 
+### 2e. Review Automation Detection
+
+Scan `.github/workflows/*.yml` and `.github/workflows/*.yaml` for automated PR review signals:
+
+**Detection patterns** (in workflow file contents):
+- `review-pr` or `review_pr` (plugin's own review command)
+- `claude` appearing near `review` (within 5 lines)
+- Common review bot references: `reviewbot`, `pr-review`, `code-review`
+
+**Detection patterns** (in workflow triggers):
+- Workflow triggered on `pull_request` events containing review-related steps
+
+If any match found, set `detected_review_automation: true`.
+This is a suggestion signal, not a hard detection -- user confirms in Step 3.
+
 ---
 
 ## Step 3: Confirm with User
@@ -81,6 +96,11 @@ Present detected settings and ask for confirmation (max 3 questions):
 **Question 2** (if test command wasn't detected): Ask for test commands.
 
 **Question 3** (if branch pattern preference): Show default `feature/{issue_num}-{description}` and ask if they want a different pattern.
+
+**Question 4** (if review automation detected in Step 2e):
+> "I detected automated PR review in your CI workflows. I'll enable the review gate so the completion hook waits for review verdicts before allowing session exit. OK?"
+
+If review automation was not detected, default to `review_gate: false` without asking.
 
 **DO NOT proceed without user confirmation.** If a value cannot be detected, ask the user directly.
 
@@ -114,9 +134,13 @@ planning:
 
 deliberation:
   conflict_overrides: []
+
+hooks:
+  execute_issue_completion_gate:
+    review_gate: REVIEW_GATE_VALUE  # true if review automation detected + confirmed
 ```
 
-Omit optional fields that don't apply (e.g., `typecheck` for Ruby).
+Omit optional fields that don't apply (e.g., `typecheck` for Ruby). Set `review_gate` to `true` only if review automation was detected in Step 2e and confirmed by the user; otherwise set to `false`.
 
 ---
 

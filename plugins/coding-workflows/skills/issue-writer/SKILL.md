@@ -1,6 +1,6 @@
 ---
 name: issue-writer
-description: Write requirements-focused issues that describe what needs to be done, not how to implement it. Works with any tracker (GitHub, Linear, Jira, Asana). Use when creating issues, updating requirements, or planning work.
+description: Writes requirements-focused issues that describe what needs to be done, not how to implement it. Works with any tracker (GitHub, Linear, Jira, Asana). Use when creating issues, updating requirements, or planning work.
 triggers:
   - creating issue
   - writing issue

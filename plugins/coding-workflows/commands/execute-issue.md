@@ -1,5 +1,5 @@
 ---
-description: Execute a planned issue (requires existing plan on issue)
+description: Implement a planned+reviewed issue using TDD; creates feature branch, opens PR, and manages review loop (up to 3 iterations)
 args:
   issue:
     description: "Issue number (e.g., 10) or full reference (e.g., other-repo#10)"
@@ -83,9 +83,11 @@ Both modes share: TDD-First Completion Loop, Verification Gate, Session Checkpoi
 
 Strict red-green-refactor per component. Test exit code = 0 is the only proof of completion.
 
+**Before starting the loop**, read the `coding-workflows:tdd-patterns` skill for stack-appropriate testing strategies and quality heuristics.
+
 ### Per-Component Cycle
 
-1. **RED**: Write the test for the next component. Run it using the focused test command from your resolved config:
+1. **RED**: Write the test for the next component using the patterns from the `coding-workflows:tdd-patterns` skill. Run it using the focused test command from your resolved config:
    ```
    {commands.test.focused} with the test file path
    ```
@@ -93,6 +95,8 @@ Strict red-green-refactor per component. Test exit code = 0 is the only proof of
 
 2. **GREEN**: Write the minimum implementation to make the test pass. Run the focused test again.
    Exit code must be 0. If not, iterate until it is.
+
+   **Stuck Loop Escalation:** If the same test fails after 2 fix attempts (per-phase counter), STOP iterating. Read the `coding-workflows:systematic-debugging` skill and follow its protocol before continuing. If the skill is not available, escalate to human with diagnostic evidence. If the debugging protocol does not resolve the failure within 2 additional structured attempts, escalate to human with the skill's escalation report. In agent team mode, this applies per-agent; if debugging does not resolve the failure, escalate to the team lead per the `coding-workflows:agent-team-protocol` skill.
 
 3. **REFACTOR**: Clean up. Run the lint and typecheck commands from your resolved config (if configured). Confirm tests still pass.
 
@@ -106,6 +110,8 @@ After all components are implemented, run the full test suite using the command 
 ```
 
 **Exit code 0 = done.** Any other exit code = not done. Do not proceed to PR creation until exit code is 0.
+
+**Integration failure escalation:** If the full suite fails after individual components passed individually, this indicates a cross-component issue. Read the `coding-workflows:systematic-debugging` skill and follow its protocol (per-phase counter). Note: no threshold applies here -- the first such failure IS the activation signal. If the skill is not available, escalate to human.
 
 **Anti-pattern**: "I'll write all tests after implementing everything" -- this is the #1 cause of sessions ending with untested code.
 
@@ -195,39 +201,37 @@ This ensures plans are challenged before implementation, not during code review.
 12. Run tests with the commands from your resolved config
 13. Create PR linking to issue with `gh pr create`
 
-## Post-PR: Review Loop (CRITICAL)
+## Post-PR: CI + Review Loop (CRITICAL)
 
-After PR creation, you MUST continue with the review loop:
+> **WARNING: "CI passed" is NOT "review approved."** CI is a prerequisite for
+> reading review feedback, NOT an exit condition. Do NOT stop after CI passes.
 
-### Wait for CI
-```bash
-gh pr checks --watch
+After PR creation, you MUST enter the following loop. Do NOT stop after pushing.
+
+> **Note:** The `execute-issue-completion-gate` Stop hook enforces the CI portion of this loop automatically. Review verdict enforcement requires `review_gate: true` in workflow.yaml (under `hooks.execute_issue_completion_gate`).
+
+<!-- SYNC: keep identical in execute-issue.md and issue-workflow SKILL.md Step 6 -->
+```
+LOOP (max 3 iterations)
+
+  1. Wait for CI: gh pr checks [PR_NUMBER] --watch
+  2. If CI fails -> fix, commit, push, restart loop
+  3. Wait for review: gh pr view [PR_NUMBER] --comments
+  4. Check review verdict:
+     - "Ready to merge" -> EXIT LOOP (success)
+     - MUST FIX items -> fix ALL, push, restart loop
+     - FIX NOW items -> fix ALL, push, restart loop
+     - NEW ISSUE items -> note them, continue
+  5. After 3 iterations with unresolved blocking items -> STOP
 ```
 
-### Request Review
-```bash
-gh issue comment [NUMBER] --repo "{org}/{repo}" --body "PR ready for review: [PR_URL]"
-```
+**Valid exit conditions (exhaustive list -- stopping for any other reason is a workflow violation):**
+1. Review says "Ready to merge" with zero blocking items
+2. 3 iterations completed with unresolved blocking items (escalate to human)
+3. Explicit human instruction to stop
 
-### Poll for Review Feedback
-```bash
-gh issue view [NUMBER] --repo "{org}/{repo}" --comments
-```
+**CI Failure Escalation:** If CI fails on the same error after 2 fix-and-push cycles, see Step 6a in the `coding-workflows:issue-workflow` skill for the full escalation protocol.
 
-**STOP and wait** for review comments. Check every few minutes if needed.
+**NEVER auto-merge.** After loop exit, post "Ready for merge. Awaiting human decision." and stop. Wait for explicit merge instruction.
 
-### Review Loop (up to 3 iterations)
-For each review comment with feedback:
-1. Address ALL feedback on the same PR branch
-2. Push fixes, wait for CI
-3. Comment on issue summarizing changes
-4. **STOP and wait** for next review
-
-After 3 iterations with unresolved feedback, escalate to human.
-
-### Await Merge Decision
-```bash
-gh issue comment [NUMBER] --repo "{org}/{repo}" --body "Ready for merge. Awaiting human decision."
-```
-
-**NEVER auto-merge.** Stop and wait for explicit merge instruction.
+For detailed verdict parsing, lint blame-shifting rules, and qualified-approval detection, follow Step 6 in the `coding-workflows:issue-workflow` skill.

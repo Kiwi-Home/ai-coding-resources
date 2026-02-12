@@ -101,16 +101,16 @@ Commands orchestrate the workflow. Skills teach the knowledge. Agents bring proj
 
 | Command | Description |
 |---------|-------------|
-| `/coding-workflows:init-config` | Bootstrap `.claude/workflow.yaml` by auto-detecting project settings |
-| `/coding-workflows:generate-assets [mode]` | Generate project-specific agents and skills from codebase scan. Mode: `agents`, `skills`, `both` (default), `review-config`, or `all` |
-| `/coding-workflows:setup` | Unified idempotent project initialization -- CLAUDE.md, config, agents, skills |
-| `/coding-workflows:help` | Show quick reference of all commands, skills, and progressive disclosure tiers |
+| `/coding-workflows:init-config` | Bootstrap workflow.yaml by auto-detecting project settings |
+| `/coding-workflows:generate-assets [mode]` | Generate project-specific agents and skills by scanning the codebase |
+| `/coding-workflows:setup` | Unified idempotent project initialization -- CLAUDE.md, config, agents, skills, and hooks |
+| `/coding-workflows:help` | Quick reference for all coding workflow commands |
 
 ### Issue Management
 
 | Command | Description |
 |---------|-------------|
-| `/coding-workflows:create-issue <platform> <desc>` | Transform a description into a structured issue and post it to the specified tracker (github, linear, jira, asana)\* |
+| `/coding-workflows:create-issue <platform> <desc>` | Create a well-structured issue in your tracker (GitHub, Linear, Jira, Asana)\* |
 
 \* `/coding-workflows:create-issue` operates independently of `workflow.yaml` configuration.
 
@@ -118,16 +118,16 @@ Commands orchestrate the workflow. Skills teach the knowledge. Agents bring proj
 
 | Command | Description |
 |---------|-------------|
-| `/coding-workflows:prepare-issue <issue>` | Full pipeline: design session, plan, review, revised plan. Stops for human approval before execution. |
+| `/coding-workflows:prepare-issue <issue>` | Full preparation pipeline - design session, plan, review, revised plan. Stops for human approval before execution. |
 
 ### Building Blocks
 
 | Command | Description |
 |---------|-------------|
-| `/coding-workflows:design-session <subject>` | Run a multi-specialist design session on an issue, PR, file, cross-repo ref, or topic and post decisions |
-| `/coding-workflows:plan-issue <issue>` | Draft a specialist-reviewed implementation plan (honors prior `/coding-workflows:design-session` decisions), then auto-chain into adversarial review |
-| `/coding-workflows:review-plan <issue>` | Adversarial review of an existing plan; posts revised plan if blocking issues found |
-| `/coding-workflows:review-pr <pr>` | Review a PR for quality, compliance, and merge readiness (works from [CLI and CI](#ci-review-setup)) |
+| `/coding-workflows:design-session <subject>` | Run a technical design session on an issue, PR, file, or topic with dynamically discovered specialist agents |
+| `/coding-workflows:plan-issue <issue>` | Draft a specialist-reviewed implementation plan (honors prior design-session decisions), then auto-chain into adversarial review |
+| `/coding-workflows:review-plan <issue>` | Adversarial review of an implementation plan; posts revised plan if blocking issues found |
+| `/coding-workflows:review-pr <pr>` | Review a pull request for quality, compliance, and merge readiness using severity-tiered findings |
 | `/coding-workflows:execute-issue <issue>` | Implement a planned+reviewed issue using TDD; creates feature branch, opens PR, and manages review loop (up to 3 iterations) |
 
 > **Important:** `/coding-workflows:plan-issue`, `/coding-workflows:review-plan`, `/coding-workflows:review-pr`, `/coding-workflows:design-session`, `/coding-workflows:create-issue`, and `/coding-workflows:prepare-issue` post comments or issues to GitHub automatically without prompting for confirmation. Review the output on the issue or PR after it's posted.
@@ -140,15 +140,79 @@ Skills auto-activate based on context (triggers and domains in frontmatter). Man
 
 | Skill | Description |
 |-------|-------------|
-| `coding-workflows:agent-patterns` | Documents the agent frontmatter metadata spec and patterns for creating project-specific agents |
+| `coding-workflows:agent-patterns` | Documents agent frontmatter metadata spec and patterns for creating effective project-specific agents |
 | `coding-workflows:agent-team-protocol` | Governs parallel code execution teams with file ownership, TDD workflow, git coordination, and team lifecycle management |
-| `coding-workflows:asset-discovery` | Discovers existing skills and agents across project, user, and plugin layers and flags potential duplicates |
-| `coding-workflows:codebase-analysis` | Criteria for analyzing codebases to inform agent and skill generation with signal hierarchy and specialist indicators |
+| `coding-workflows:asset-discovery` | Discovers existing skills and agents across project, user, and plugin layers and provides similarity heuristics for detecting overlapping assets |
+| `coding-workflows:codebase-analysis` | Criteria for analyzing codebases to inform agent and skill generation |
 | `coding-workflows:deliberation-protocol` | Governs multi-round specialist deliberation for design sessions, plan reviews, and adversarial dispatch |
-| `coding-workflows:issue-workflow` | Structured workflow for planning and executing GitHub issues with mandatory research and build-vs-buy evaluation |
-| `coding-workflows:issue-writer` | Writes requirements-focused issues that describe what needs to be done, not how to implement it |
-| `coding-workflows:pr-review` | Framework for reviewing PRs with severity tiers, trivial check, exit criteria, and CREATE ISSUE protocol |
-| `coding-workflows:stack-detection` | Technology stack detection reference tables mapping project files to languages, dependencies to frameworks, and directories to domains |
+| `coding-workflows:issue-workflow` | Structured workflow for planning and executing GitHub issues |
+| `coding-workflows:issue-writer` | Writes requirements-focused issues that describe what needs to be done, not how to implement it. Works with any tracker (GitHub, Linear, Jira, Asana). |
+| `coding-workflows:pr-review` | Framework for reviewing pull requests with severity-tiered findings, ecosystem-adapted focus areas, and strict exit criteria |
+| `coding-workflows:stack-detection` | Technology stack detection reference tables and per-stack analysis guidance. Maps project files to languages, dependencies to frameworks, and directory structures to domains |
+| `coding-workflows:systematic-debugging` | Structured debugging methodology for hypothesis-driven failure resolution. Encodes failure classification, evidence hierarchy, hypothesis quality criteria, and escalation thresholds |
+| `coding-workflows:tdd-patterns` | Stack-aware TDD patterns, anti-patterns, and quality heuristics for test-driven development |
+
+## Hooks
+
+The plugin ships lifecycle hooks that enforce workflow rules automatically. Hooks activate on plugin install -- no configuration needed.
+
+### Shipped Hooks
+
+| Hook | Event | Behavior | What It Enforces |
+|------|-------|----------|------------------|
+| `test-evidence-logger` | PostToolUse / PostToolUseFailure | Advisory (exit 0) | Logs test/lint evidence to session trail; warns on failure with Verification Gate reminder |
+| `deferred-work-scanner` | PostToolUse | Advisory (exit 0) | Scans PR body at creation time for untracked deferral language without issue links |
+| `stop-deferred-work-check` | Stop | Advisory (exit 0) | Warns when deferred work is detected in the transcript without follow-up issue references |
+| `execute-issue-completion-gate` | Stop | Blocking (exit 2, escalates after threshold) | Prevents premature session exit when open PR has incomplete CI checks. With `review_gate: true`, also enforces review verdict polling. |
+| `check-agent-output-completeness` | SubagentStop | Blocking (lenient) | Validates subagent output contains expected structured sections based on agent role |
+
+### Disabling Hooks
+
+Each hook can be disabled individually via environment variable:
+
+```bash
+# PostToolUse hooks
+export CODING_WORKFLOWS_DISABLE_HOOK_TEST_EVIDENCE_LOGGER=1
+export CODING_WORKFLOWS_DISABLE_HOOK_DEFERRED_WORK_SCANNER=1
+
+# Stop hooks
+export CODING_WORKFLOWS_DISABLE_HOOK_STOP_DEFERRED_WORK=1
+export CODING_WORKFLOWS_DISABLE_HOOK_EXECUTE_ISSUE_COMPLETION_GATE=1
+
+# SubagentStop hooks
+export CODING_WORKFLOWS_DISABLE_HOOK_AGENT_OUTPUT_COMPLETENESS=1
+```
+
+The completion gate escalation threshold and review gate can be configured:
+
+```bash
+# Default is 3 -- after this many blocked stops, the hook degrades to advisory
+export CODING_WORKFLOWS_ESCALATION_THRESHOLD=5
+```
+
+Or via `workflow.yaml`:
+
+```yaml
+# In .claude/workflow.yaml:
+hooks:
+  execute_issue_completion_gate:
+    review_gate: true       # Enable review verdict polling (default: false)
+    escalation_threshold: 5 # Override blocked-stop threshold (default: 3)
+```
+
+Environment variables take precedence over `workflow.yaml` values.
+
+### Hook Merging
+
+Plugin hooks merge with your user-level hooks (defined in `~/.claude/settings.json` or `.claude/settings.json`) and run in parallel. Plugin hooks do not replace or conflict with user hooks.
+
+### Error Handling
+
+- The **PostToolUse evidence logger** (`test-evidence-logger`) always exits 0. If it cannot parse input or match commands, it silently succeeds. On test failure, it injects advisory context but never blocks.
+- The **PostToolUse deferral scanner** (`deferred-work-scanner`) always exits 0. If `gh` is unavailable or the PR cannot be fetched, it silently succeeds. Only fires on `gh pr create` commands.
+- The **Stop advisory hook** (`stop-deferred-work-check`) always exits 0. If it cannot parse input or read the transcript, it silently succeeds.
+- The **Stop completion gate** (`execute-issue-completion-gate`) fails open: if `gh` is unavailable, not authenticated, or returns errors, it warns and allows the stop. After the escalation threshold (default 3 blocked stops), it degrades to advisory mode. CI checking is always active; review verdict polling requires `review_gate: true` in workflow.yaml. This is an intentional departure from the advisory-only pattern -- the escalation counter prevents infinite loops while providing deterministic enforcement.
+- The **SubagentStop hook** (`check-agent-output-completeness`) fails open: if it cannot read the transcript or patterns config, it allows the subagent to complete. Only blocks when all required sections are missing AND output is suspiciously short (< 200 chars).
 
 ## Configuration Reference
 
@@ -160,6 +224,7 @@ Configuration lives in `.claude/workflow.yaml`. Run `/coding-workflows:init-conf
 | `commands` | Test (focused + full), lint, typecheck, branch pattern |
 | `planning` | Always-include agents, reference docs |
 | `deliberation` | Conflict overrides for multi-round specialist dispatch |
+| `hooks` | Hook behavior overrides (e.g., escalation threshold) |
 
 ## Agent Discovery
 
@@ -354,7 +419,9 @@ Example workflow with inline fallback (extends the [minimal workflow](#minimal-w
             Use the REPO and PR NUMBER above for all operations.
 
             ---
-            FALLBACK REVIEW RULES (apply if command or skill cannot be resolved):
+            FALLBACK REVIEW RULES (apply if command or skill cannot be resolved;
+            this is a static snapshot from the pr-review skill and may drift from
+            skill updates -- use inline fallback only when resilience outweighs consistency):
 
             ## Severity Tiers
             Every finding must be classified into exactly one tier:

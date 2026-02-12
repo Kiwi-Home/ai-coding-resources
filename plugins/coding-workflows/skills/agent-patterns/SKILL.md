@@ -1,7 +1,7 @@
 ---
 name: agent-patterns
 description: |
-  Document agent frontmatter metadata spec and patterns for creating effective
+  Documents agent frontmatter metadata spec and patterns for creating effective
   project-specific agents. Use when: creating agents, understanding agent
   discovery, or configuring agent metadata.
 triggers:
@@ -47,7 +47,7 @@ Agent files use YAML frontmatter with these fields:
 ---
 name: my-reviewer
 description: "Reviews database patterns and schema design..."
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
 domains: [storage, database, schema, vectors, sqlite]
 role: reviewer
 ---
@@ -71,7 +71,10 @@ role: reviewer
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `tools` | string (comma-separated) or array | *(inherits all)* | Tools available to this agent when dispatched. When present, restricts the agent to the listed tools. Omitting the field inherits all tools. Generated agents use the comma-separated string form. Users may add or remove tools freely. For platform-level validation rules, see the `plugin-validation` skill. |
 | `skills` | list[string] | `[]` | Skills this agent should preload when dispatched. Informational metadata for tooling and documentation. |
+
+**`tools` parsing:** Tool names are split on commas. Leading and trailing whitespace around each name is trimmed. Trailing commas are ignored. Tool names are case-sensitive (e.g., `Read` not `read`). YAML array syntax (`tools: [Read, Grep]`) is also accepted.
 
 **Naming convention**:
 - Project skills: bare name (`billing-patterns`)
@@ -96,6 +99,20 @@ skills:
   - plugin:coding-workflows:issue-workflow  # plugin skill (namespaced)
 ---
 ```
+
+### Tool Configuration Patterns
+
+The `tools` field distinguishes agent capabilities:
+
+| Pattern | Tools | Use Case |
+|---------|-------|----------|
+| Review-only | `Read, Grep, Glob, SendMessage, TaskUpdate, TaskList` | Agents that inspect code but never modify it. Safer for adversarial review dispatch. |
+| Execution-capable | `Read, Grep, Glob, Bash, Write, Edit, SendMessage, TaskUpdate, TaskList` | Agents that implement changes. Used by `/coding-workflows:execute-issue` for TDD loops. |
+| Full access | *(omit field)* | Inherits all available tools. Suitable for general-purpose agents. |
+
+**Why Bash matters:** Including `Bash` grants shell execution capability (running tests, linters, build commands). Review-only agents intentionally omit `Bash` (and `Write`/`Edit`) to ensure they can only observe, not modify. This is a trust boundary, not just a convenience.
+
+**Anti-pattern:** Do not include `Bash` on review-only agents "just in case." If an agent's role is `reviewer`, its tool set should reflect read-only access unless the review workflow requires running tests or linters.
 
 ### Role Semantics
 
@@ -173,7 +190,7 @@ A well-defined agent file has these sections:
 ---
 name: api-reviewer
 description: "Reviews API patterns, async code, and request handling"
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
 domains: [api, routes, async, http, endpoints, middleware]
 role: reviewer
 ---

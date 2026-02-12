@@ -64,6 +64,8 @@ If `workflow.yaml` exists, run stack detection using the `coding-workflows:stack
 
 Do NOT mark stale for `commands.test/lint/typecheck` mismatches -- these may be intentional user overrides.
 
+**Review gate drift:** Run review automation detection per `init-config` Step 2e. If `.github/workflows/` now contains review automation signals but `hooks.execute_issue_completion_gate.review_gate` is `false` (or absent), flag as stale: "Review automation detected in CI workflows but `review_gate` is currently `false`."
+
 **Domain drift:** Also detect new directory-based domains (per `coding-workflows:stack-detection` Domain Detection table) not represented in existing agents/skills. Report as informational: "New domains detected: [list]"
 
 ### 0d. Monorepo Check
@@ -105,7 +107,7 @@ Phases to run:
   [run/skip] CLAUDE.md
   [run/skip] Configuration
   [run/skip] Asset generation (skills then agents)
-  [info]     Hooks (placeholder)
+  [active]   Hooks (plugin hooks active by default)
 ```
 
 ### 0f. Determine Pipeline Scope
@@ -206,11 +208,26 @@ Using preflight data (detected stack, existing assets, classifications), generat
 
 ---
 
-## Step 4: Hooks (placeholder)
+## Step 4: Hooks
 
-Hooks configuration is not yet available. This step will be enabled in a future version.
+Hooks are provided by the plugin and active by default. No configuration is needed.
 
-No prompt. No file reads. Display this informational message in the summary.
+The plugin ships five hooks across three lifecycle events:
+
+**PostToolUse** (advisory):
+- `test-evidence-logger`: Logs test/lint evidence; warns on failure
+- `deferred-work-scanner`: Scans PR body for untracked deferral language
+
+**Stop** (advisory + blocking):
+- `stop-deferred-work-check`: Advisory warning for untracked deferred work
+- `execute-issue-completion-gate`: Blocks premature exit during CI checks; with `review_gate: true`, also enforces review verdict polling
+
+**SubagentStop** (blocking, lenient):
+- `check-agent-output-completeness`: Validates subagent output structure
+
+Hooks can be disabled individually via environment variables. See the README Hooks section for details, disable variables, and error handling.
+
+No prompt. No file writes. Display hook status in the summary.
 
 ---
 
@@ -230,15 +247,19 @@ Agents:
 Skills:
   .claude/skills/X/SKILL.md [created/skipped]  {reason}
 
-Other:
-  Hooks                    [info]  (not yet available)
+Hooks:
+  test-evidence-logger              [active]  Advisory -- logs test/lint evidence
+  deferred-work-scanner             [active]  Advisory -- scans PR body for untracked deferrals
+  stop-deferred-work-check          [active]  Advisory -- warns on untracked deferred work
+  execute-issue-completion-gate     [active]  Blocking -- CI gate always on; review gate if configured
+  check-agent-output-completeness   [active]  Blocking (lenient) -- validates subagent output structure
 
 Pipeline completed:
   [x] Preflight audit
   [x] CLAUDE.md              {created / skipped (exists) / skipped (declined)}
   [x] Configuration          {created / updated / skipped (current)}
   [x] Asset generation       Skills: {N created, M skipped}  Agents: {N created, M skipped}
-  [x] Hooks                  (placeholder)
+  [x] Hooks                  (active by default -- see README for disable options)
 
 Prompts used: {N} of 4 max
 

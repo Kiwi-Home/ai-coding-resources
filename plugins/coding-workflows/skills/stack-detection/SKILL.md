@@ -110,6 +110,8 @@ When performing LLM-driven codebase analysis (see `coding-workflows:codebase-ana
 - **Testing framework**: Unit vs integration test organization, fixture patterns
 - **Module boundaries**: How the codebase separates concerns
 
+For TDD patterns and testing strategy guidance per stack, see `coding-workflows:tdd-patterns`.
+
 ---
 
 ## Polyglot Projects
