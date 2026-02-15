@@ -49,9 +49,7 @@ Generated assets are **pre-populated with project-specific knowledge** when suff
 
 ## Step 1: Analyze Codebase
 
-Read the `coding-workflows:codebase-analysis` skill for analysis criteria and the `coding-workflows:stack-detection` skill for per-stack analysis guidance:
-- `plugins/coding-workflows/skills/codebase-analysis/SKILL.md`
-- `plugins/coding-workflows/skills/stack-detection/SKILL.md`
+Read the `coding-workflows:codebase-analysis` skill for analysis criteria and the `coding-workflows:stack-detection` skill for per-stack analysis guidance.
 
 If the `coding-workflows:codebase-analysis` skill is not found, perform basic analysis: read CLAUDE.md, README.md, and existing agent/skill frontmatter only.
 
@@ -114,7 +112,7 @@ When fallback is used, the question budget in Step 3 increases from 2 to 3 (more
 
 ## Step 2: Discover Existing Assets & Present Findings
 
-Read the `coding-workflows:asset-discovery` skill for discovery locations and similarity heuristics.
+Read the `coding-workflows:asset-discovery` skill for discovery locations and similarity heuristics. If the skill file doesn't exist, proceed without it and note the missing skill.
 
 Scan all three layers for existing assets (both agents AND skills, for cross-type matching):
 
@@ -269,14 +267,14 @@ Proceed with generation? (adjust list or confirm)
 ```
 
 **Question 1**: "Confirm or adjust proposed agents?"
-**Question 2** (if needed): "Should any agent have role: architect?"
+**Question 2** (if needed): "Adjust any agent roles? Options: `reviewer` (default), `architect`, `specialist`. See Role-Based Defaults (Step 4b) for trade-offs."
 
 #### Fallback path (Step 1b was used):
 
 Present detected stack, offer domain selection (current behavior):
 
 **Question 1**: "Which domains should have specialist agents?" (show detected domains)
-**Question 2**: "Should any agent have role: architect?"
+**Question 2**: "Adjust any agent roles? Options: `reviewer` (default), `architect`, `specialist`. See Role-Based Defaults (Step 4b) for trade-offs."
 **Question 3** (if existing agents found): "Update existing agents or skip them?"
 
 #### Agent abort condition:
@@ -352,29 +350,45 @@ Before writing each file, apply the three-tier classification from the `coding-w
 
 ### Skill Scaffold Template
 
-```markdown
+**Frontmatter reference:** Spec fields per `coding-workflows:skill-creator` (Step 4 > Frontmatter table). The `domains`, `generated_by`, and `generated_at` fields are internal provenance tracking for staleness detection, used by `coding-workflows:asset-discovery` — not part of the Anthropic spec (validators accept these fields).
+
+**Description quality:** Description field requirements per `coding-workflows:skill-creator` (Step 4 > Frontmatter). Generated descriptions must discriminate THIS skill from others — generic triggers that differ only by domain noun are non-discriminating. Interpolate analysis-derived specifics whenever available.
+
+#### Analysis path (Step 1 succeeded):
+
+```yaml
 ---
 name: {domain}-patterns
-description: "{Domain} conventions and patterns for {framework} projects. Use when: reviewing {domain} code, implementing new {domain} features, or onboarding to {domain} patterns."
-triggers:
-  - reviewing {domain} code
-  - implementing {domain} features
+description: "{Domain} conventions and patterns for {framework} projects. Encodes {specific_conventions_from_analysis}. Use when: {analysis_trigger_1}, {analysis_trigger_2}, or {analysis_trigger_3}."
 domains: [{domain keywords}]
 generated_by: generate-assets
 generated_at: "{YYYY-MM-DD}"
 ---
+```
 
+Example: If analysis found custom error wrapper + response envelope + auth middleware:
+```yaml
+description: "API conventions and patterns for FastAPI projects. Encodes error wrapper pattern, standard response envelope, and dependency-injection auth. Use when: implementing new API endpoints, reviewing request/response handling, or debugging middleware chains."
+```
+
+#### Fallback path (Step 1b was used, limited context):
+
+```yaml
+---
+name: {domain}-patterns
+description: "{Domain} conventions and patterns for {framework} projects. TODO: Replace with project-specific description per coding-workflows:skill-creator guidance. Use when: reviewing {domain} code, implementing new {domain} features, or onboarding to {domain} patterns."
+domains: [{domain keywords}]
+generated_by: generate-assets
+generated_at: "{YYYY-MM-DD}"
+---
+```
+
+```markdown
 # {Domain} Patterns
 
 ## Purpose
 {analysis_path: 1-2 sentences from analysis with evidence}
 {fallback_path: TODO block}
-
-## When to Use
-Use this skill when:
-- Reviewing {domain} code
-- Implementing new {domain} features
-- Onboarding a new contributor to {domain} conventions
 
 ## Conventions
 {analysis_path: observed patterns with file citations}
@@ -396,6 +410,8 @@ Use this skill when:
 ## Reference
 # TODO: Links to internal docs, ADRs, or external resources
 ```
+
+**Note:** The template does NOT include a "When to Use" body section. Per the skill-creator spec, "when to use" information belongs in the `description` field -- the body loads only after triggering, so body-level usage guidance wastes tokens.
 
 ### Framework-Specific Hints (Fallback Path Only)
 
@@ -449,7 +465,7 @@ For frameworks not listed above, use generic hints:
 
 **Gate**: Skip if mode is `skills`.
 
-For each selected domain, generate `.claude/agents/{domain}-reviewer.md`.
+For each selected domain, generate `.claude/agents/{domain}-{role}.md`.
 
 ### Pre-population Sources
 
@@ -469,6 +485,36 @@ For each selected domain, generate `.claude/agents/{domain}-reviewer.md`.
 - Never reference proposed-but-declined skills.
 - In `agents`-only mode: reference only already-existing skills. For absent skills that would be relevant, log a warning instead.
 - Domain overlap matching: compare agent `domains` against skill `domains` to auto-populate.
+- Universal skills: the following plugin skills are ALWAYS included in every
+  generated agent's frontmatter `skills:`, regardless of role or domain. They
+  shape fundamental agent behavior and cannot be inherited from parent context.
+  - `plugin:coding-workflows:knowledge-freshness` (~1,273 tokens)
+- Domain skills: skills matched by domain overlap (agent `domains` vs skill
+  `domains`) are added to frontmatter `skills:` alongside universal skills.
+  All matched skills go in frontmatter — there is no per-skill size threshold.
+  Per-skill size thresholds were evaluated and removed: a per-skill gate
+  (e.g., 2000 chars) is redundant when the aggregate budget check (below)
+  already caps total injection. Individual skills that are too large would
+  blow the aggregate budget naturally, making a separate per-skill check
+  unnecessary. See `references/token-budgets.md` for full rationale.
+- Context budget check: sum the token estimates of all frontmatter-listed skills
+  (universal + domain). The recommended aggregate budget is ~5,000 tokens per
+  agent. Universal skills consume a fixed baseline (~1,273 tokens currently),
+  leaving ~3,727 tokens for domain-specific skills. If total exceeds ~5,000
+  tokens, warn during Step 3 agent proposal:
+  "Skills budget: ~{N} tokens ({count} skills).
+   Baseline (universal): ~{U} tokens ({u_count} skills)
+   Domain-specific: ~{D} tokens ({d_count} skills)
+   Exceeds recommended ~5,000 token budget. Consider removing lower-priority
+   domain skills from frontmatter."
+  User may proceed or adjust the domain skills list. Universal skills cannot
+  be removed.
+
+  For rationale, measurement methodology, and adjustment guidance for these
+  token budgets, see `coding-workflows:asset-discovery` skill's
+  `references/token-budgets.md`. The canonical token estimate for each
+  universal skill is maintained at its first occurrence in the universal
+  skills list above (currently the `knowledge-freshness` bullet item).
 
 TODOs only for: edge cases requiring human judgment, production-specific knowledge not visible in code, areas where research was declined.
 
@@ -483,9 +529,13 @@ When pre-populating conventions, cite evidence:
 
 Before writing each file, apply the three-tier classification from the `coding-workflows:asset-discovery` skill:
 
-1. **Self-match with provenance branching:** If `.claude/agents/{name}.md` already exists at the exact output path:
+1. **Cross-name detection:** When generating `{domain}-{role}.md`, check if other agents exist at `.claude/agents/{domain}-*.md` with a different role suffix. If found, flag:
+   "Existing agent `{domain}-{old_role}.md` found. The new agent will be generated as `{domain}-{role}.md`. Consider renaming or removing the old file to avoid confusion."
+   This is informational only -- do not auto-delete.
+
+2. **Self-match with provenance branching:** If `.claude/agents/{name}.md` already exists at the exact output path:
    1. Read provenance fields (`generated_by`, `generated_at`) from existing file's frontmatter
-   2. If generated: compare existing asset's `domains` array against current analysis domains for staleness (see `coding-workflows:asset-discovery` skill's Domain-Comparison Staleness Detection). Also compare existing asset's `tools` field against current template tools for tools staleness (agents only, not skills — see `coding-workflows:asset-discovery` skill's Tools-Comparison Staleness Detection).
+   2. If generated: compare existing asset's `domains` array against current analysis domains for staleness (see `coding-workflows:asset-discovery` skill's Domain-Comparison Staleness Detection). Also compare existing asset's `tools` field against the **role-specific** template tools (from Role-Based Tool Sets table), using the agent's `role` field to select the correct template set (agents only, not skills -- see `coding-workflows:asset-discovery` skill's Tools-Comparison Staleness Detection). Also compare existing asset's `skills` array against the expected skills set (universal + domain-matched) for staleness (see `coding-workflows:asset-discovery` skill's Skills-Comparison Staleness Detection).
    3. Branch to appropriate UX:
 
    | # | State | UX |
@@ -497,9 +547,12 @@ Before writing each file, apply the three-tier classification from the `coding-w
    **Error paths:**
    - Frontmatter unparseable: treat as manually created
    - `generated_by` present but `domains` array empty/missing: skip staleness detection, offer "Update or skip?"
+   - `role` field absent: treat as `role: reviewer` (default) for comparison purposes
    - `tools` field absent: skip tools staleness (agent inherits all)
    - `tools` field empty string: treat as absent (skip tools staleness)
    - `tools` field is YAML list: normalize to set for comparison (same as comma-separated)
+   - `skills` field absent: treat as stale (missing all expected skills)
+   - `skills` field empty array: treat as stale (missing all expected skills)
 
    **Staleness summary format:**
    ```
@@ -518,6 +571,16 @@ Before writing each file, apply the three-tier classification from the `coding-w
      + {tool} (in template, missing from agent)
      - {tool} (in agent, not in current template)
 
+     Skills drift:
+       Missing universal skills:
+       + {skill} (required by workflow — agent predates upgrade)
+       Missing domain skills:
+       + {skill} (matches agent domains — added since last generation)
+       Dangling references:
+       - {skill} (in agent, no longer resolves to any layer)
+       User-added skills (informational):
+       ~ {skill} (not in expected set — preserved)
+
      [Update / Skip / Show full proposed content]
    ```
 
@@ -525,30 +588,93 @@ Before writing each file, apply the three-tier classification from the `coding-w
    - The `+` lines are actioned during update (added via set-union). The `-` lines are informational only (user-added tools are preserved, template-removed tools are flagged for user awareness).
    - Users may edit `tools` freely. Template removals do NOT automatically propagate to existing agents. See `coding-workflows:agent-patterns` for `tools` field semantics and `coding-workflows:asset-discovery` for staleness signal definitions.
 
-   **Update behavior for tools:** When the "Update" action is chosen for a stale agent, tools are merged via set-union: `updated_tools = existing_tools | template_tools`. This adds missing template tools while preserving user-added tools.
+   **Skills staleness notes:**
+   - Missing universal skills (`+` lines under "Missing universal skills") indicate the agent was generated before a workflow upgrade introduced the universal skill. These are always actioned during update.
+   - Missing domain skills (`+` lines under "Missing domain skills") indicate the project's skill inventory has grown since the agent was generated. These are actioned during update.
+   - Dangling references (`-` lines) indicate skills that were removed or renamed since generation. These are removed during update.
+   - User-added skills (`~` lines) are informational only and preserved during update.
 
-2. **BLOCK:** If exact name matches an existing agent in any layer, warn and offer rename.
-3. **WARN:** If similarity threshold exceeded, confirm user's choice.
-4. **Cross-type:** If keyword-bag overlap with an existing skill meets the threshold, note as informational (expected pattern for domain coverage).
+   **Update behavior for tools:** When the "Update" action is chosen for a stale agent, tools are merged via set-union: `updated_tools = existing_tools | template_tools`. This adds missing template tools while preserving user-added tools. When a role change is detected (existing `role` differs from proposed `role`), merge tools via set-union of the new role's default tools and any user-added tools from the existing agent. User-added tools are those present in the existing agent but NOT in the old role's default tool set.
+
+   **Update behavior for skills:** When the "Update" action is chosen for a stale agent, skills are updated as: `updated_skills = (existing_skills - dangling_refs) | universal_skills | domain_matched_skills`. This adds missing universal and domain skills, removes dangling references, and preserves user-added skills.
+
+3. **BLOCK:** If exact name matches an existing agent in any layer, warn and offer rename.
+4. **WARN:** If similarity threshold exceeded, confirm user's choice.
+5. **Cross-type:** If keyword-bag overlap with an existing skill meets the threshold, note as informational (expected pattern for domain coverage).
+
+### Role-Based Defaults
+
+| Field | `reviewer` | `architect` | `specialist` |
+|-------|------------|-------------|--------------|
+| `model` | `sonnet` | *(omit)* | *(omit)* |
+| `permissionMode` | `default` | `default` | `default` |
+| `maxTurns` | `50` | `75` | *(omit)* |
+| `color` | `blue` | `purple` | `green` |
+
+Apply these defaults when generating agent frontmatter based on the agent's `role`.
+Fields marked *(omit)* should NOT be written to the generated file -- omission
+inherits the parent context's value (for `model`) or leaves the agent unbounded
+(for `maxTurns`).
+
+**`permissionMode` note:** All roles use `default` per the `coding-workflows:agent-patterns`
+spec (line 93: "Recommended for reviewers"). Read-only enforcement for reviewer agents
+is achieved through the `tools` field (see Role-Based Tool Sets), not through
+`permissionMode`. The `plan` mode is reserved for planning/research agents, not reviewers.
+
+**Role inference during Step 3 proposals:**
+- Single domain with review focus -> `reviewer` (default)
+- Cross-cutting or multi-domain -> `architect`
+- Domain-specific implementation focus -> `specialist`
+- Default when user doesn't specify -> `reviewer`
+
+**Unknown role:** If `role` is not one of `specialist`, `reviewer`, or `architect`,
+warn user ("Unknown role '{value}'. Valid values: specialist, reviewer, architect.
+Defaulting to reviewer.") and apply `reviewer` defaults.
+
+### Role-Based Tool Sets
+
+| Role | `tools` value |
+|------|---------------|
+| `reviewer` | `Read, Grep, Glob, SendMessage, TaskUpdate, TaskList` |
+| `architect` | `Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList` |
+| `specialist` | `Read, Grep, Glob, Bash, Write, Edit, SendMessage, TaskUpdate, TaskList` |
+
+**Trust boundary:** Reviewer agents intentionally omit `Bash`, `Write`, and `Edit`
+to enforce read-only access. This is a trust boundary, not a convenience.
+See `coding-workflows:agent-patterns` for tool configuration patterns.
 
 ### Agent Template
 
+**Conditional field omission:** The `model` and `maxTurns` fields are only written when
+the role-based default is NOT *(omit)*. When *(omit)*, omit the entire line from the
+generated file (do not write the key at all). See the rendered examples below for
+correct output per role.
+
 ```markdown
 ---
-name: {domain}-reviewer
+name: {domain}-{role}
 description: "Reviews {domain} code for {framework} patterns and project conventions"
-tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
+tools: {role_tools}
+model: {role_model}
+permissionMode: default
+maxTurns: {role_maxTurns}
+color: {role_color}
 domains: [{domain keywords}]
-skills: [{matching skill names}]
-role: {reviewer or architect}
+# NOTE: skills listed here are fully injected into agent context at startup.
+# This consumes context tokens (~5,000 token aggregate budget recommended).
+# Universal skills (always included — do not remove):
+#   - plugin:coding-workflows:knowledge-freshness (~1,273 tokens)
+# Remaining budget (~3,727 tokens) is for domain-specific skills.
+skills: [plugin:coding-workflows:knowledge-freshness, {matching domain skill names}]
+role: {role}
 generated_by: generate-assets
 generated_at: "{YYYY-MM-DD}"
 ---
 
-# {Domain} Reviewer
+# {Domain} {Role_capitalized}
 
 ## Your Role
-Review {domain} code for correctness, performance, and consistency with project patterns.
+{role_description}
 
 ## Project Conventions
 {analysis_path: 2-3 observed patterns with file path citations}
@@ -568,11 +694,73 @@ Decisions that are NOT up for debate:
 - [ ] No security issues (input validation, data exposure)
 
 ## Skills You Should Reference
+The following skills provide relevant patterns (informational -- they are NOT
+auto-injected unless also listed in frontmatter `skills:` above):
 {analysis_path: matching project + plugin skills with brief context}
 {fallback_path: matching plugin skills only}
 ```
 
-**`tools` field note:** The default template includes `Bash` to enable execution dispatch (running test suites, linters, and build commands via `/coding-workflows:execute-issue`). `SendMessage`, `TaskUpdate`, and `TaskList` support team coordination when agents are dispatched in multi-agent workflows. The explicit `tools` list (rather than omitting the field) enables staleness detection and documents the agent's intended capabilities. See `coding-workflows:agent-patterns` for tool configuration patterns distinguishing review-only from execution-capable agents.
+**Rendered Examples (one per role):**
+
+These examples show **frontmatter only** because the body structure (Your Role, Project Conventions, Settled Decisions, Review Checklist, Skills You Should Reference) is role-independent -- see the Agent Template above for the full body template. The frontmatter is what varies by role.
+
+Reviewer (`api-reviewer.md`):
+```yaml
+---
+name: api-reviewer
+description: "Reviews API code for FastAPI patterns and project conventions"
+tools: Read, Grep, Glob, SendMessage, TaskUpdate, TaskList
+model: sonnet
+permissionMode: default
+maxTurns: 50
+color: blue
+domains: [api, routes, endpoints, http, middleware]
+# Universal: knowledge-freshness (always included). Domain: api-patterns.
+skills: [plugin:coding-workflows:knowledge-freshness, api-patterns]
+role: reviewer
+generated_by: generate-assets
+generated_at: "2026-02-13"
+---
+```
+
+Architect (`infra-architect.md`):
+```yaml
+---
+name: infra-architect
+description: "Reviews infrastructure code for deployment patterns and project conventions"
+tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
+permissionMode: default
+maxTurns: 75
+color: purple
+domains: [deploy, ci, docker, infrastructure, config]
+# Universal: knowledge-freshness (always included).
+skills: [plugin:coding-workflows:knowledge-freshness]
+role: architect
+generated_by: generate-assets
+generated_at: "2026-02-13"
+---
+```
+Note: `model` line is absent (inherits from parent context).
+
+Specialist (`billing-specialist.md`):
+```yaml
+---
+name: billing-specialist
+description: "Reviews billing code for Stripe patterns and project conventions"
+tools: Read, Grep, Glob, Bash, Write, Edit, SendMessage, TaskUpdate, TaskList
+permissionMode: default
+color: green
+domains: [billing, payments, stripe, webhooks]
+# Universal: knowledge-freshness (always included). Domain: billing-patterns.
+skills: [plugin:coding-workflows:knowledge-freshness, billing-patterns]
+role: specialist
+generated_by: generate-assets
+generated_at: "2026-02-13"
+---
+```
+Note: both `model` and `maxTurns` lines are absent.
+
+**`tools` field note:** The `tools` field is role-dependent (see Role-Based Tool Sets table above). Reviewer agents are restricted to read-only tools as a trust boundary. Architect agents add `Bash` for shell execution. Specialist agents add `Bash`, `Write`, and `Edit` for full implementation capability. All roles include `SendMessage`, `TaskUpdate`, and `TaskList` for team coordination. See `coding-workflows:agent-patterns` for tool configuration patterns.
 
 ### Domain-Specific Keywords
 
@@ -593,7 +781,7 @@ Decisions that are NOT up for debate:
 
 Generate `.claude/review-config.yaml` using the codebase analysis from Step 1.
 
-1. Read the `coding-workflows:pr-review` skill to understand the four universal review category types and the review config schema
+1. Read the `coding-workflows:pr-review` skill to understand the four universal review category types and the review config schema. If the skill file doesn't exist, proceed without it and note the missing skill.
 2. Map codebase analysis results to category instantiations:
    - **Correctness**: What does "correct" mean here? (from framework patterns, test expectations, CLAUDE.md requirements)
    - **Integrity**: What references matter? (import graph, API contracts, config references, cross-module dependencies)
@@ -629,8 +817,8 @@ Generated assets:
 - .claude/skills/{domain1}/SKILL.md
 - .claude/skills/{domain2}/SKILL.md
 {If agents generated:}
-- .claude/agents/{domain1}-reviewer.md
-- .claude/agents/{domain2}-reviewer.md
+- .claude/agents/{domain1}-{role}.md
+- .claude/agents/{domain2}-{role}.md
 {If review config generated:}
 - .claude/review-config.yaml
 

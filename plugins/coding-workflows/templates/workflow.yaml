@@ -11,6 +11,10 @@ project:
   org: my-org               # GitHub organization or username
   language: python           # Primary language: python, javascript, typescript, rust, go, ruby, java, elixir
   git_provider: github       # Only github is supported in v1
+  # remote: origin            # Git remote that defines project identity (for issue/PR
+                               # commands). Default: origin. Set when multiple remotes
+                               # exist and a non-origin remote defines the project.
+                               # Does NOT affect git push/pull/fetch targets.
 
 # Build/test/lint commands
 # Workflow commands use these instead of hardcoded tool invocations.
@@ -39,6 +43,12 @@ planning:
   reference_docs:
     - CLAUDE.md
     # Add project-specific docs (e.g., docs/architecture.md, docs/conventions.md)
+  # Complexity triage for /coding-workflows:prepare-issue.
+  # Controls how prepare-issue routes issues before design sessions.
+  # 'auto' evaluates issue complexity using the complexity-triage skill.
+  # Set to 'full' to disable auto-triage (always run full design session).
+  triage:
+    default_mode: auto      # auto | solo | lightweight | full
 
 # Deliberation configuration (for /coding-workflows:design-session and multi-round dispatch)
 deliberation:
@@ -49,9 +59,17 @@ deliberation:
 
 # Hook behavior overrides
 hooks:
+  check_dependency_version:
+    # mode: warn                  # "warn" (advisory, default) or "block" (denies the tool call)
+    # package_managers:            # all supported if omitted; explicit list overrides
+    #   - pip
+    #   - npm
+    # allowlist:                   # packages that skip the version check
+    #   - setuptools
+    #   - wheel
   execute_issue_completion_gate:
-    # escalation_threshold: 3    # Blocked-stop attempts before degrading to advisory
-    review_gate: false            # Set true if using automated PR review (/coding-workflows:review-pr)
+    # escalation_threshold: 3     # Blocked-stop attempts before degrading to advisory (default: 3)
+    review_gate: false             # Set true if using automated PR review (default: false)
 
 # --- Examples for other languages ---
 #

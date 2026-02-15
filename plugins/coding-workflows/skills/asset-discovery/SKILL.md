@@ -2,35 +2,13 @@
 name: asset-discovery
 description: |
   Discovers existing skills and agents across project, user, and plugin layers
-  and provides similarity heuristics for detecting overlapping assets. Used by
-  setup and generator commands to prevent duplicate scaffolding.
-triggers:
-  - generating skills
-  - generating agents
-  - detecting duplicate assets
-  - checking for name collisions
+  and provides similarity heuristics for detecting overlapping assets. Use when
+  generating skills or agents, detecting duplicate assets, or checking for name
+  collisions.
 domains: [discovery, similarity, assets, duplicates]
 ---
 
 # Asset Discovery
-
-## When to Use
-
-Reference this skill before creating skills or agents. The unified generator command (`/coding-workflows:generate-assets`) and the `/coding-workflows:setup` command consult these tables to detect existing assets and flag potential duplicates before scaffolding.
-
-### Legacy Provenance Mapping
-
-All `generated_by` values across versions map to the current generator. All values classify as "generated" for provenance purposes.
-
-| Legacy Value | Era | Current Equivalent |
-|-------------|-----|-------------------|
-| `workflow-generate-agents` | pre-v3 | `generate-assets` |
-| `workflow-generate-skills` | pre-v3 | `generate-assets` |
-| `workflow-setup` | pre-v3 | `generate-assets` |
-| `generate-agents` | v3 | `generate-assets` |
-| `generate-skills` | v3 | `generate-assets` |
-| `setup` | v3+ | `generate-assets` (when setup invokes generation internally) |
-| `generate-assets` | v4+ | *(current)* |
 
 ## Discovery Locations
 
@@ -65,6 +43,20 @@ Classify each discovered asset's provenance state based on frontmatter fields (s
 
 **Provenance tags in discovery output:** Show `[generated]` or `[manual]` tags for `[project]`-layer assets only. User-layer and plugin-layer assets show without provenance tags.
 
+### Legacy Provenance Mapping
+
+All `generated_by` values across versions map to the current generator. All values classify as "generated" for provenance purposes.
+
+| Legacy Value | Era | Current Equivalent |
+|-------------|-----|-------------------|
+| `workflow-generate-agents` | pre-v3 | `generate-assets` |
+| `workflow-generate-skills` | pre-v3 | `generate-assets` |
+| `workflow-setup` | pre-v3 | `generate-assets` |
+| `generate-agents` | v3 | `generate-assets` |
+| `generate-skills` | v3 | `generate-assets` |
+| `setup` | v3+ | `generate-assets` (when setup invokes generation internally) |
+| `generate-assets` | v4+ | *(current)* |
+
 ### Domain-Comparison Staleness Detection
 
 When a self-match is detected for a generated asset, compare the asset's `domains` array from frontmatter against the current analysis output's detected domains for that domain area:
@@ -94,6 +86,27 @@ Tools staleness signals (agents only, not skills):
 ```
 
 Skills do not have a `tools` field and are not evaluated for tools staleness (agents only, not skills).
+
+### Skills-Comparison Staleness Detection
+
+When a self-match is detected for a generated agent, compare the agent's `skills` frontmatter array against the expected skills set. The expected set is the union of:
+1. **Universal skills** (always required, defined by the generator command)
+2. **Domain-matched skills** (skills whose `domains` overlap with the agent's `domains`)
+
+```
+Skills staleness signals (agents only, not skills):
+- Universal skill missing from agent's `skills` list → stale (missing universal)
+- Domain-matched skill absent from agent's `skills` list → stale (skills drift)
+- Skill in agent's `skills` list no longer resolving to any layer → stale (dangling reference)
+- Skill in agent's `skills` list present but not in expected set → informational (user addition)
+- All expected skills present, no dangling refs → current
+```
+
+**Universal vs domain distinction:** The staleness summary must distinguish between these two categories. Missing universal skills indicate the agent predates a workflow upgrade. Missing domain skills indicate the project's skill inventory has grown since the agent was generated.
+
+**Resolution order:** Check universal skills first, then domain-matched skills. This ensures universal skill gaps are surfaced prominently.
+
+Skills staleness is evaluated for agents only (not skills), since skills do not have a `skills` frontmatter field.
 
 ### Provenance Summary
 
@@ -183,9 +196,13 @@ For command implementers referencing this skill — verify these when integratin
 - [ ] Provenance state shown for project-layer assets
 - [ ] Domain-comparison staleness evaluated for generated self-matches
 - [ ] Tools-Comparison staleness evaluated for generated agent self-matches (agents only, not skills)
+- [ ] Skills-Comparison staleness evaluated for generated agent self-matches (agents only, not skills)
+- [ ] Skills staleness distinguishes universal (missing workflow upgrade) from domain (inventory growth)
 - [ ] Reference integrity: agent `skills` frontmatter entries resolve to existing skills (project, user, or plugin layer). Unresolvable auto-populated refs are removed; unresolvable user-specified refs produce a warning. Dangling `skills` references are an additional staleness signal.
 
 ## Related Skills
 
 - `coding-workflows:agent-patterns` -- Defines the agent frontmatter spec (`name`, `domains`, `role`) and provenance fields (`generated_by`, `generated_at`) that this skill reads during discovery. Reference for understanding what fields are available on discovered agents.
 - `coding-workflows:codebase-analysis` -- Defines staleness evaluation criteria (what domain/framework changes constitute meaningful staleness). Referenced during domain-comparison staleness detection.
+
+See `references/token-budgets.md` for token budget rationale, measurement methodology, and adjustment guidance for the skills context budget used in agent generation.

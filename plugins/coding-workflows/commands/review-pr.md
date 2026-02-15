@@ -17,7 +17,7 @@ allowed-tools:
 ## Step 0: Resolve Project Context
 
 1. Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Proceed to validation.
+   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to validation.
    - If file does not exist: auto-detect below.
 
 2. **Auto-detect (zero-config fallback):**
@@ -29,6 +29,7 @@ allowed-tools:
 3. **Validate resolved context:**
    - `project.org` and `project.name` must be non-empty (stop if missing)
    - `git_provider` must be `github` (stop with message if not)
+   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
 
 4. **Store resolved ecosystem identifier** for use in Step 4 resource lookup.
 
@@ -53,7 +54,7 @@ Extract linked issue from body: match `Closes #N`, `Fixes #N`, or `Resolves #N` 
 
 ## Step 2: Determine Review Mode
 
-Read the `coding-workflows:pr-review` skill to obtain the iteration mode threshold value.
+Read the `coding-workflows:pr-review` skill to obtain the iteration mode threshold value. If the skill file doesn't exist, proceed without it and note the missing skill.
 
 **Count previous review comments:**
 
@@ -65,7 +66,16 @@ Calculate iteration = count + 1.
 
 **Threshold** (from skill): iterations 1-3 = COMPREHENSIVE, 4+ = VERIFICATION.
 
-**Failure modes** (non-zero exit, empty output, non-numeric value): default to iteration 1.
+**Failure handling** (non-zero exit, empty output, non-numeric value from the count query):
+
+Do NOT silently default to iteration 1. Instead, run a simpler fallback query to check whether any `claude[bot]` comments exist at all:
+
+```bash
+gh pr view {pr} --repo {org}/{repo} --json comments --jq '[.comments[] | select(.author.login == "claude[bot]")] | length'
+```
+
+- If this fallback returns a non-zero count: previous reviews exist but iteration counting failed. Default to **VERIFICATION mode** (iteration = threshold value) to avoid duplicating a comprehensive review.
+- If this fallback returns zero or also fails: no prior reviews detected. Default to iteration 1 (COMPREHENSIVE).
 
 **Emit header as a unit** (HTML comment marker + visible header):
 
@@ -75,11 +85,18 @@ Normal:
 **[Content Review] Review iteration: N | Mode: COMPREHENSIVE**
 ```
 
-Failure:
+Failure (no prior reviews detected):
 ```
 <!-- content-review-iteration:1 -->
-**[Content Review] Review iteration: 1 | Mode: COMPREHENSIVE** _(iteration detection unavailable; defaulting to 1)_
+**[Content Review] Review iteration: 1 | Mode: COMPREHENSIVE** _(iteration count unavailable; no prior reviews detected)_
 ```
+
+Failure (prior reviews exist):
+```
+<!-- content-review-iteration:T -->
+**[Content Review] Review iteration: T | Mode: VERIFICATION** _(iteration count unavailable; prior reviews detected, defaulting to VERIFICATION)_
+```
+Where T = the threshold value from the skill (currently 4).
 
 Note: no space after the colon in the marker — `content-review-iteration:N`, not `content-review-iteration: N`.
 
@@ -107,7 +124,7 @@ For each changed file identified from the diff, read FULL content using the Read
 
 ## Step 4: Perform Review
 
-Read the `coding-workflows:pr-review` skill for the universal review framework.
+Read the `coding-workflows:pr-review` skill for the universal review framework. If the skill file doesn't exist, proceed without it and note the missing skill.
 
 **Look for project-specific review config:**
 - If `.claude/review-config.yaml` exists: apply project-specific focus areas, anti-patterns, and conventions alongside the universal framework
@@ -119,7 +136,11 @@ Read the `coding-workflows:pr-review` skill for the universal review framework.
 
 **Categorize all findings** by severity tier (from skill): MUST FIX, FIX NOW, CREATE ISSUE.
 
-**Apply trivial check** decision framework (from skill) for FIX NOW vs CREATE ISSUE classification.
+**CRITICAL: Do NOT create any GitHub issues during this step.** Collect and classify all findings. Issue creation happens exclusively in Step 7. Creating issues during review steps is a workflow violation.
+
+**Apply finding disposition framework** (from skill) for FIX NOW vs CREATE ISSUE classification.
+
+**Apply finding validation gate** (from skill) before classifying any finding as CREATE ISSUE.
 
 ---
 
@@ -159,31 +180,52 @@ Apply strict exit rules from skill:
 
 If any CREATE ISSUE findings exist:
 
-1. Ensure label exists:
+1. **Deduplication check** (before creating anything):
+   ```bash
+   gh issue list --repo {org}/{repo} --label review-followup --state open --search "PR #{pr}" --json number,title,body
+   ```
+   - If result contains an issue whose body includes `PR #{pr_number}`: this PR already has a follow-up issue. Append new findings as a comment on that issue:
+     ```bash
+     gh issue comment {existing_issue_number} --repo {org}/{repo} --body "Additional findings from review iteration {N}:\n\n{new findings}"
+     ```
+     Skip to step 5 (reference in review comment).
+   - If no matching issue found: proceed to step 2.
+   - If query fails (non-zero exit after retry): skip dedup and proceed directly to step 2 (create issue). Add note in the issue body: "Created without dedup verification — may duplicate an existing follow-up issue for this PR. Check for duplicates and consolidate if needed." Add note in the review comment: "Follow-up issue created without dedup verification (query failed). Check for duplicate follow-up issues."
+
+2. Ensure label exists:
    ```bash
    gh label create review-followup --description "Non-trivial findings from content review" --color "D4A017" --repo {org}/{repo} 2>/dev/null || true
    ```
 
-2. Group ALL CREATE ISSUE findings from this review
+3. Group ALL CREATE ISSUE findings from this review
 
-3. Create ONE consolidated issue using template from skill:
+4. Create ONE consolidated issue using template from skill:
    ```bash
    gh issue create --repo {org}/{repo} --title "[Content Review] <overall theme>" --label "review-followup" --body "<issue body>"
    ```
 
-4. Reference the issue number in your review comment
+5. Reference the issue number (new or existing) in your review comment
 
 **Failure modes:**
+- Deduplication query fails → skip dedup, create issue directly (may duplicate; safe fallback)
 - Label creation fails → proceed without label
-- Issue creation fails → post review with error note: "Failed to create follow-up issue — CREATE ISSUE findings listed below but not tracked"
+- Issue creation fails → post review with error note listing findings inline
+- Issue comment (append) fails → create a new issue instead (degraded dedup)
 
-**MANDATORY:** A review that lists CREATE ISSUE findings without creating the issue is incomplete.
+**MANDATORY:** A review that lists CREATE ISSUE findings without creating or appending to an issue is incomplete.
 
 ---
 
 ## Step 8: Post Review Comment
 
-Format review body with: iteration marker, mode header, findings by severity, issue compliance results (if applicable), exit determination, and CREATE ISSUE reference (if applicable).
+Format review body with: iteration marker, mode header, findings by severity, finding disposition summary, issue compliance results (if applicable), exit determination, and CREATE ISSUE reference (if applicable).
+
+**Finding disposition summary** (include after findings by severity):
+```markdown
+### Finding Disposition
+- **FIX NOW** ([N] findings): [brief list - these should be fixed in the current PR]
+- **CREATE ISSUE** ([N] findings): [brief list - tracked in #{issue_number}]
+```
 
 ```bash
 gh pr comment {pr} --repo {org}/{repo} --body "{review}"

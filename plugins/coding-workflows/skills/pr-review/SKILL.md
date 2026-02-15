@@ -3,12 +3,8 @@ name: pr-review
 description: |
   Framework for reviewing pull requests with severity-tiered findings,
   ecosystem-adapted focus areas, and strict exit criteria. Defines review
-  principles, severity tiers, trivial check criteria, and the CREATE ISSUE
-  protocol. Use when reviewing PRs from CLI or CI.
-triggers:
-  - reviewing pull request
-  - pr review
-  - code review
+  principles, severity tiers, finding disposition framework, and the CREATE
+  ISSUE protocol. Use when reviewing PRs from CLI or CI.
 domains: [review, pr, quality, validation]
 ---
 
@@ -23,7 +19,7 @@ Every finding must be classified into exactly one tier. There is no "optional" o
 | Tier | Label | Meaning | Merge Impact |
 |------|-------|---------|-------------|
 | MUST FIX | Blocks merge | Incorrect behavior, broken references, security issues, missing acceptance criteria | PR cannot merge |
-| FIX NOW | Mandatory trivial fix | Small editorial fix that passes the Trivial Check below | PR cannot merge until fixed |
+| FIX NOW | Mandatory fix, inline | Fix that can be made within the current PR per the Finding Disposition Framework below | PR cannot merge until fixed |
 | CREATE ISSUE | Non-trivial, tracked | Valid concern requiring separate work; does not block merge once filed | PR can merge after issue is filed |
 
 **Examples:**
@@ -41,34 +37,56 @@ Every finding must be classified into exactly one tier. There is no "optional" o
 
 ---
 
-## Trivial Check Decision Framework
+## Finding Disposition Framework
 
-Use this framework to classify findings as FIX NOW or CREATE ISSUE.
+After classifying findings by review category, apply this framework to assign the final severity tier (FIX NOW vs CREATE ISSUE). This framework replaces any binary trivial/non-trivial classification with a disposition-first approach.
 
-**FIX NOW when ALL true:**
-- Change is contained within a single component
-- No structural metadata changes (e.g., no frontmatter field additions/removals, no schema changes)
-- No new cross-component references introduced
-- No behavioral semantic changes
-- Clearly editorial (typos, wording, formatting)
+### Inline-First Principle
 
-**CREATE ISSUE when ANY true:**
-- Spans multiple components
-- Changes structural metadata
-- Changes behavioral logic or thresholds
-- Introduces new cross-component references
-- Modifies severity or exit criteria definitions
+**When in doubt, classify as FIX NOW, not CREATE ISSUE.** The cost of a small inline fix is lower than the overhead of tracking a separate issue. Err on the side of fixing in the current PR.
 
-**Cross-ecosystem examples:**
+### Disposition Pre-Filter
+
+Before assigning FIX NOW or CREATE ISSUE, ask:
+
+> **Can the PR author fix this within the current PR without expanding the PR's scope?**
+
+- **YES** → **FIX NOW** (regardless of whether it touches multiple files already in the diff)
+- **NO** → Proceed to the CREATE ISSUE gate below
+
+"Expanding scope" means requiring changes to files not already in the PR diff, or requiring new design decisions or architectural changes beyond the PR's stated objective.
+
+### FIX NOW Criteria
+
+Classify as FIX NOW when the fix:
+- Is contained within files already in the PR diff
+- Does not require new design decisions or architectural changes
+- Does not expand the PR's scope to untouched modules
+
+### CREATE ISSUE Gate (ALL must be true)
+
+A finding becomes CREATE ISSUE **only when ALL four conditions are true**:
+
+1. **Too large for inline fix** — cannot be resolved within the current PR's file scope without significantly expanding the diff
+2. **Too important to ignore** — the finding has real impact on correctness, security, or maintainability (not just stylistic preference)
+3. **Clearly valid** — passes the Finding Validation Gate (below)
+4. **Genuinely out of scope** — addresses concerns beyond the PR's stated objective
+
+If ANY condition is false, the finding is either **FIX NOW** (conditions 1 or 4 are false) or **dropped** (conditions 2 or 3 are false).
+
+### Cross-Ecosystem Examples
 
 | Finding | Context | Classification | Why |
 |---------|---------|----------------|-----|
-| Fix typo in skill description | Plugin content | FIX NOW | Single asset, editorial |
-| Rename concept across commands and skills | Plugin content | CREATE ISSUE | Spans multiple assets |
-| Fix incorrect type annotation | TypeScript | FIX NOW | Single file, no behavioral change |
-| Add missing error handling across API routes | TypeScript | CREATE ISSUE | Spans multiple components |
+| Fix typo in skill description | Plugin content | FIX NOW | Editorial, fixable inline |
+| Rename concept across commands and skills | Plugin content | CREATE ISSUE | All 4: too large (spans many files), important, valid, out of scope |
+| Fix incorrect type annotation | TypeScript | FIX NOW | Single file already in diff |
+| Add missing error handling across API routes | TypeScript | CREATE ISSUE | All 4: spans untouched files, important, valid, out of scope |
 | Fix mutable default argument | Python | FIX NOW | Single function, clear fix |
-| Add type hints to all public APIs | Python | CREATE ISSUE | Spans multiple modules |
+| Add type hints to all public APIs | Python | CREATE ISSUE | All 4: spans untouched modules, important, valid, out of scope |
+| Fix logic error in touched function | Any | FIX NOW | File already in diff, no scope expansion |
+| Add input validation to 3 files in diff | Any | FIX NOW | All files already in diff, no new design needed |
+| Add input validation to 3 untouched files | Any | CREATE ISSUE | All 4: expands scope, important, valid, out of scope |
 
 ---
 
@@ -109,7 +127,7 @@ Without project config, evaluate:
 
 When project config exists, apply the specific conventions listed there.
 
-### 4. Quality (severity via Trivial Check)
+### 4. Quality (severity via Finding Disposition Framework)
 
 Is it clear, complete, and maintainable? This category is universal — it applies the same way across all ecosystems.
 
@@ -163,7 +181,18 @@ The ONLY valid approval is unqualified "Ready to merge" with zero blocking items
 
 ## CREATE ISSUE Protocol
 
-When a review contains CREATE ISSUE findings, exactly ONE consolidated issue is created per review.
+When a review contains CREATE ISSUE findings, exactly ONE consolidated issue is created per PR.
+
+**Sequencing rule:** ALL findings must be fully collected and classified BEFORE any issue is created. Do NOT create issues as you discover findings. Issue creation is a single batch operation that happens after the review is complete.
+
+**Cross-iteration rule:** ONE issue per PR, not per iteration. Before creating a new issue:
+1. Query for existing `review-followup` issues referencing this PR:
+   ```bash
+   gh issue list --repo {org}/{repo} --label review-followup --state open --search "PR #{pr_number}" --json number,title,body
+   ```
+2. If a matching issue exists (body contains `PR #[pr_number]`): append new findings as a comment on the existing issue. Do NOT create a second issue.
+3. If no matching issue exists: create one using the template below.
+4. If the query fails (non-zero exit after retry): skip dedup and create the issue directly using the template below. Add note in the issue body: "Created without dedup verification — may duplicate an existing follow-up issue for this PR." This ensures findings are always tracked in an issue, even when dedup is unavailable.
 
 **Label:** `review-followup`
 
@@ -186,10 +215,48 @@ When a review contains CREATE ISSUE findings, exactly ONE consolidated issue is 
 ```
 
 **Rules:**
-- ONE issue per review, not per finding
+- ONE issue per PR, not per finding, not per iteration
+- Do NOT create issues during the review phase — collect all findings first
 - Filing is mandatory — a review listing CREATE ISSUE findings without creating the issue is incomplete
-- Reference the created issue number in the review comment
+- Reference the created issue number (new or existing) in the review comment
 - If issue creation fails, note the failure in the review and list findings inline
+
+---
+
+## Finding Validation Gate
+
+Before a finding can be classified as CREATE ISSUE, it must pass validation:
+
+- [ ] Not already addressed in the PR (check the diff, not just the finding description)
+- [ ] Not a misunderstanding of an established pattern (check existing codebase for precedent)
+- [ ] Genuinely out of scope for the current PR (not fixable with a small edit to files already in the diff)
+
+Findings that fail validation are dropped — they are not findings.
+
+---
+
+## Anti-Patterns
+
+### Issue Sprawl
+Creating multiple follow-up issues from a single review or across iterations of the same PR. ONE issue per PR, consolidated. If a follow-up issue already exists, append to it.
+
+### Mid-Review Issue Creation
+Creating issues as findings are discovered rather than batching at the end. All findings must be collected and classified before any issue creation.
+
+### Inline Finding Orphaning
+Listing CREATE ISSUE findings inline in the review comment instead of creating a tracked issue when a fallback path is available. Inline findings create a signal gap — subsequent iterations cannot distinguish them from normal review prose, and they are not considered "filed" for exit criteria purposes. Always prefer creating a tracked issue, even at the cost of potential duplication.
+
+### Review-Scope Creep
+Requesting inline fixes that expand the PR beyond its original scope. If fixing a finding would require changes to files not already in the diff or introduce new architectural decisions, classify as CREATE ISSUE rather than FIX NOW.
+
+**Examples:**
+
+| Scenario | Classification | Why |
+|----------|----------------|-----|
+| "This function in `auth.py` should also validate tokens" on a PR that only touches `user.py` | CREATE ISSUE | `auth.py` is not in the diff — fixing expands scope |
+| "Add error handling for this new API endpoint" on a PR that adds the endpoint | FIX NOW | File is already in the diff, no scope expansion |
+| "Refactor this module to use the strategy pattern" on a bug-fix PR | CREATE ISSUE | Architectural change beyond the PR's objective |
+| "Fix the off-by-one error in the loop you added" on the same PR | FIX NOW | Direct fix to code already in the diff |
 
 ---
 
@@ -228,32 +295,9 @@ In VERIFICATION mode, skip entirely (only needed in COMPREHENSIVE).
 
 Project-specific review focus is generated per-repo via `/coding-workflows:generate-assets review-config` and stored in `.claude/review-config.yaml`. When this file exists, the `review-pr` command uses it to adapt the universal framework to the project's specific concerns.
 
-```yaml
-# Generated by /coding-workflows:generate-assets review-config
-# Project-specific review focus for use with /coding-workflows:review-pr
-generated_by: generate-assets
-generated_at: "YYYY-MM-DD"
+See `references/review-config-schema.md` for the full YAML schema. Read it when generating or editing `.claude/review-config.yaml`.
 
-# What "correct" means in this project
-correctness:
-  - "Description of what correctness means here"
-
-# What references and contracts to verify
-integrity:
-  - "Description of what references matter here"
-
-# What conventions to enforce
-compliance:
-  - "Description of what conventions apply here"
-
-# Project-specific anti-patterns to watch for
-anti_patterns:
-  - name: "Anti-pattern name"
-    description: "What it is and why it's problematic"
-    detection: "How to spot it during review"
-```
-
-**Without this file:** The `review-pr` command applies only the universal framework defined in this skill. The review is less targeted but still functional — severity tiers, exit criteria, and the trivial check all apply universally.
+**Without this file:** The `review-pr` command applies only the universal framework defined in this skill. The review is less targeted but still functional — severity tiers, exit criteria, and the finding disposition framework all apply universally.
 
 ---
 

@@ -28,7 +28,7 @@ allowed-tools:
 ## Step 0: Resolve Project Context (MANDATORY)
 
 1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Proceed to step 3.
+   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
    - If file does not exist: proceed to step 2.
 
 2. **Auto-detect (zero-config fallback):**
@@ -39,6 +39,7 @@ allowed-tools:
 3. **Validate resolved context:**
    - `project.org` and `project.name` must be non-empty (stop if missing)
    - `git_provider` must be `github` (stop with message if not)
+   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
@@ -90,7 +91,7 @@ Before invoking specialists, clearly state:
 
 ## Step 2a: Discover Available Specialists
 
-Scan `.claude/agents/*.md` for agent definitions. Read frontmatter from each to extract `name`, `description`, `domains`, and `role`.
+Scan `.claude/agents/*.md` for agent definitions. Read ONLY the YAML frontmatter (between the opening and closing `---` markers) from each file to extract `name`, `description`, `domains`, and `role`. Do not read agent body content during this step — the agent's full definition is loaded at dispatch time.
 
 Match agents to the session subject:
 - Compare subject keywords against agent `domains` arrays (fuzzy matching)
@@ -121,7 +122,20 @@ If BOTH conditions are true, use multi-round dispatch protocol:
 If EITHER condition is false (single specialist, or no conflict potential):
 - Use single-round Task dispatch
 
-**When using multi-round dispatch**: Read the `coding-workflows:deliberation-protocol` skill and follow its protocol for Steps 3-5. Resume at Step 6 after the protocol completes.
+**When using multi-round dispatch**: Follow the deliberation protocol for Steps 3-5. Resume at Step 6 after the protocol completes.
+
+> **Deferred read:** Do not read `coding-workflows:deliberation-protocol` during pre-dispatch. Read it only after Round 1 responses are collected AND conflicts are detected in Step 4.
+
+---
+
+## Step 2c: Specialist Context Budget
+
+Each specialist dispatch is subject to these constraints:
+
+- **Scope**: Only files and sections matching the specialist's `domains` metadata
+- **Budget**: ~200 lines max of subject context per specialist
+- **Overflow**: When source material exceeds budget, include the most relevant sections and list full file paths for omitted content
+- **Tracking**: Record scoping decisions for the Context Budget summary in Step 6
 
 ---
 
@@ -139,7 +153,7 @@ For each specialist, use the Task tool with `subagent_type` set to the agent nam
 **Subject:** [SUBJECT]
 
 **Context:**
-[Relevant excerpt - NOT the entire document/diff]
+[Domain-scoped excerpt from Step 2c — files/sections matching this specialist's domains, ~200 lines max]
 
 **Question:**
 [Specific question for this specialist]
@@ -155,14 +169,6 @@ End your response with:
 - **Reasoning:** [1 sentence]
 - **Key concern:** [Most important issue, or "None"]
 ```
-
-**By session type:**
-
-| Session Type | Specialists | Questions |
-|--------------|-------------|-----------|
-| **Issue (new feature)** | Architect + domain specialist | "Does this fit our architecture?" + "Implementation approach?" |
-| **PR Review** | Domain specialists for changed files | "Are these changes correct?" + "What's missing?" |
-| **Architecture Decision** | Architect + 2 domain specialists | "Trade-offs of approach A vs B?" |
 
 ---
 
@@ -248,6 +254,11 @@ Items that cross module/service/repo boundaries, require their own design, or ar
 
 ### Open Questions
 [Anything needing human input]
+
+### Context Budget
+- [Specialist A]: [N files, ~M lines] — [what was dispatched]
+- [Specialist B]: [N files, ~M lines] — [what was dispatched]
+- Solo session *(use when no specialists were dispatched)*
 ```
 
 **For PR Review sessions:**
@@ -273,6 +284,10 @@ Follow-up work that crosses module/service/repo boundaries, requires its own des
 - [Follow-up work] -- Reason: [cross-boundary / design-required / risk-elevating]
 
 *When classification is unclear, default to inline.*
+
+### Context Budget
+- [Specialist A]: [N files, ~M lines] — [what was dispatched]
+- [Specialist B]: [N files, ~M lines] — [what was dispatched]
 ```
 
 ---

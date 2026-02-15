@@ -23,7 +23,7 @@ allowed-tools:
 ## Step 0: Resolve Project Context (MANDATORY)
 
 1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Proceed to step 3.
+   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
    - If file does not exist: proceed to step 2.
 
 2. **Auto-detect (zero-config fallback):**
@@ -36,6 +36,7 @@ allowed-tools:
    - `project.org` and `project.name` must be non-empty (stop if missing)
    - `commands.test.full` should exist (warn if missing, skip test steps)
    - `git_provider` must be `github` (stop with message if not)
+   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
@@ -83,7 +84,7 @@ Both modes share: TDD-First Completion Loop, Verification Gate, Session Checkpoi
 
 Strict red-green-refactor per component. Test exit code = 0 is the only proof of completion.
 
-**Before starting the loop**, read the `coding-workflows:tdd-patterns` skill for stack-appropriate testing strategies and quality heuristics.
+**Before starting the loop**, read the `coding-workflows:tdd-patterns` skill for stack-appropriate testing strategies and quality heuristics. If the skill file doesn't exist, proceed without it and note the missing skill.
 
 ### Per-Component Cycle
 
@@ -197,7 +198,7 @@ This ensures plans are challenged before implementation, not during code review.
 8. Create feature branch using the branch pattern from your resolved config
 9. **Verification Gate**: Before committing, run the full test suite and linter with FRESH evidence
 10. **Spec Compliance Check**: Verify you built exactly what was requested - nothing more, nothing less
-11. **Deferred Work Tracking**: Scan plan for deferred work. Apply the Follow-Up Issue Threshold from the `coding-workflows:issue-workflow` skill to each deferral. Items below threshold are done inline in the current PR; items above threshold get a follow-up issue via `/coding-workflows:issue-writer` linked to the parent issue. No silent deferrals -- every deferral must be either addressed inline or tracked as an issue.
+11. **Deferred Work Tracking**: Scan plan for deferred work. Apply the Follow-Up Issue Threshold from the `coding-workflows:issue-workflow` skill to each deferral. Items below threshold are done inline in the current PR; items above threshold get a follow-up issue via `coding-workflows:issue-writer` linked to the parent issue. No silent deferrals -- every deferral must be either addressed inline or tracked as an issue.
 12. Run tests with the commands from your resolved config
 13. Create PR linking to issue with `gh pr create`
 
@@ -221,7 +222,7 @@ LOOP (max 3 iterations)
      - "Ready to merge" -> EXIT LOOP (success)
      - MUST FIX items -> fix ALL, push, restart loop
      - FIX NOW items -> fix ALL, push, restart loop
-     - NEW ISSUE items -> note them, continue
+     - CREATE ISSUE items -> note them, continue
   5. After 3 iterations with unresolved blocking items -> STOP
 ```
 
@@ -230,8 +231,17 @@ LOOP (max 3 iterations)
 2. 3 iterations completed with unresolved blocking items (escalate to human)
 3. Explicit human instruction to stop
 
-**CI Failure Escalation:** If CI fails on the same error after 2 fix-and-push cycles, see Step 6a in the `coding-workflows:issue-workflow` skill for the full escalation protocol.
+**CI Failure Escalation:** If CI fails on the same error after 2 fix-and-push cycles, see Step 6a in `references/execution-details.md` of the `coding-workflows:issue-workflow` skill for the full escalation protocol.
 
-**NEVER auto-merge.** After loop exit, post "Ready for merge. Awaiting human decision." and stop. Wait for explicit merge instruction.
+**NEVER auto-merge.** After loop exit, post "Ready for merge. Awaiting human decision. After approval, run `/coding-workflows:merge-issue {{issue}}` to merge and clean up." and stop. Wait for explicit merge instruction.
 
 For detailed verdict parsing, lint blame-shifting rules, and qualified-approval detection, follow Step 6 in the `coding-workflows:issue-workflow` skill.
+
+---
+
+## Cross-References
+
+- `/coding-workflows:merge-issue` -- merges PR and cleans up after execution completes and PR is approved
+- `/coding-workflows:execute-issue-worktree` -- worktree variant of this command
+- `/coding-workflows:cleanup-worktree` -- standalone worktree cleanup for abandoned work
+- `coding-workflows:issue-workflow` -- the skill defining the full issue lifecycle

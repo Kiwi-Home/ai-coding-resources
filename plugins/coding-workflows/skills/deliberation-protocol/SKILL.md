@@ -3,14 +3,10 @@ name: deliberation-protocol
 description: >
   Governs multi-round specialist deliberation for design sessions,
   plan reviews, and adversarial dispatch. Defines conflict detection,
-  dispatch rounds, cross-pollination, and resolution protocols.
-triggers:
-  - /coding-workflows:design-session
-  - /coding-workflows:plan-issue
-  - /coding-workflows:review-plan
+  dispatch rounds, cross-pollination, and resolution protocols. Referenced
+  during design sessions, plan reviews, and adversarial plan challenges.
 domains: [deliberation, conflict-resolution]
 user-invocable: false
-disable-model-invocation: true
 ---
 
 # Deliberation Protocol
@@ -93,9 +89,28 @@ When no conflict overrides are configured: all pairs default to LOW, meaning sin
 ## Phase 4: Resolution & Optional Round 3 (advisory: ~2 minutes)
 
 - If round 2 resolved conflicts: proceed to Phase 5
+- **Non-engagement short-circuit**: If a specialist's round 2 response does not substantively address the conflict question, treat their round 1 position as final. Do not re-prompt. See engagement criteria below.
+- If round 2 produced no new information (no specialist engaged per the criteria below): skip round 3, chair resolves using confidence-weighted rules from round 1 responses
 - If conflicts persist: ONE more round (round 3) with specific resolution question, OR chair decides using confidence-weighted rules
 - After round 3 OR MAX_ROUNDS reached: chair decides regardless
 - Escalation: If all specialists express low confidence after final round, escalate to human
+
+### Engagement Criteria (Round 2 "New Information" Heuristic)
+
+A specialist **has engaged** in round 2 if their response introduces reasoning not present in their round 1 output. The conclusion may stay the same -- what matters is whether the specialist addressed the conflict with new analysis.
+
+| Response pattern | Engaged? | Example |
+|-----------------|----------|---------|
+| New argument for same conclusion | Yes | "I still recommend X, but here's why Y's concern doesn't apply: [new reasoning]" |
+| Changed recommendation | Yes | "After considering Y's point, I'd revise to Z" |
+| Acknowledged trade-off with analysis | Yes | "Y is right about the risk, but the mitigation is [new detail]" |
+| Restated round 1 position verbatim or near-verbatim | No | "As I said, X is the right approach" |
+| Dismissed without analysis | No | "Already addressed in round 1" |
+| No response | No | (specialist did not reply) |
+
+**Bright-line rule:** New reasoning about the conflict = engaged. Same words, different conflict = not engaged.
+
+> **Anti-pattern:** Re-prompting a specialist who has declined to engage in round 2. If a specialist restates their round 1 position or says the conflict is "already addressed," further prompting wastes budget without changing the outcome.
 
 ---
 
@@ -137,5 +152,12 @@ Per-phase budgets (Round 1: 4 min, Round 2: 3 min, Round 3: 2 min, Shutdown: 1 m
 1. If a specialist has not responded and the chair is ready to proceed: continue without them
 2. If rounds are taking longer than budgeted: the session continues (budgets do not abort phases)
 3. After `MAX_ROUNDS` exhausted: chair decides using confidence-weighted resolution rules from Phase 4
+
+**Observability data points** the chair should track as internal state during session execution (these do not appear in session output -- they inform chair decisions about budget and round progression):
+- Rounds used vs MAX_ROUNDS
+- Specialists dispatched vs responded (per round)
+- Conflicts detected and resolution method (short-circuit / consensus / chair decision)
+
+The session output templates (Context Budget section in `/coding-workflows:design-session`) already capture the user-facing summary: specialist dispatch scope (files and lines per specialist). The observability data points above are complementary internal state that the chair uses to decide when to short-circuit, escalate, or terminate -- they do not need separate output formatting.
 
 > **Note:** Sessions may exceed the ~10-minute total guideline. The session-level budget is a planning heuristic, not a hard ceiling.

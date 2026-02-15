@@ -23,7 +23,7 @@ allowed-tools:
 ## Step 0: Resolve Project Context (MANDATORY)
 
 1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Proceed to step 3.
+   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
    - If file does not exist: proceed to step 2.
 
 2. **Auto-detect (zero-config fallback):**
@@ -35,6 +35,7 @@ allowed-tools:
 3. **Validate resolved context:**
    - `project.org` and `project.name` must be non-empty (stop if missing)
    - `git_provider` must be `github` (stop with message if not)
+   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 

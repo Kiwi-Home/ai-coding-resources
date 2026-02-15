@@ -10,21 +10,47 @@ allowed-tools:
 
 ## Commands
 
+### Setup
+
 | Command | Description |
 |---------|-------------|
 | `/coding-workflows:init-config` | Bootstrap workflow.yaml by auto-detecting project settings |
 | `/coding-workflows:generate-assets [mode]` | Generate project-specific agents and skills by scanning the codebase |
 | `/coding-workflows:setup` | Unified idempotent project initialization -- CLAUDE.md, config, agents, skills, and hooks |
 | `/coding-workflows:help` | Quick reference for all coding workflow commands |
+
+### Issue Management
+
+| Command | Description |
+|---------|-------------|
 | `/coding-workflows:create-issue <platform> <desc>` | Create a well-structured issue in your tracker (GitHub, Linear, Jira, Asana)\* |
+
+\* `/coding-workflows:create-issue` operates independently of `workflow.yaml` configuration.
+
+### Pipeline
+
+| Command | Description |
+|---------|-------------|
+| `/coding-workflows:prepare-issue <issue> [mode]` | Full preparation pipeline with complexity triage. Routes to solo, lightweight, or full design session based on issue complexity (or explicit mode), then plan + review. Stops for human approval before execution. |
+
+### Building Blocks
+
+| Command | Description |
+|---------|-------------|
 | `/coding-workflows:design-session <subject>` | Run a technical design session on an issue, PR, file, or topic with dynamically discovered specialist agents |
 | `/coding-workflows:plan-issue <issue>` | Draft a specialist-reviewed implementation plan (honors prior design-session decisions), then auto-chain into adversarial review |
 | `/coding-workflows:review-plan <issue>` | Adversarial review of an implementation plan; posts revised plan if blocking issues found |
 | `/coding-workflows:review-pr <pr>` | Review a pull request for quality, compliance, and merge readiness using severity-tiered findings |
 | `/coding-workflows:execute-issue <issue>` | Implement a planned+reviewed issue using TDD; creates feature branch, opens PR, and manages review loop (up to 3 iterations) |
-| `/coding-workflows:prepare-issue <issue>` | Full preparation pipeline - design session, plan, review, revised plan. Stops for human approval before execution. |
+| `/coding-workflows:execute-issue-worktree <issue>` | Execute a planned+reviewed issue in an isolated git worktree. Creates worktree, implements changes, commits, pushes, and creates PR. Use AFTER planning is complete. |
 
-\* `/coding-workflows:create-issue` operates independently of `workflow.yaml` configuration.
+### Maintenance
+
+| Command | Description |
+|---------|-------------|
+| `/coding-workflows:merge-issue <issue>` | Merge a PR and clean up branch + worktree for a completed issue |
+| `/coding-workflows:cleanup-worktree <issue>` | Remove worktree and branch for a completed issue; idempotent with unmerged-changes safety check |
+| `/coding-workflows:check-updates [sources]` | Check upstream dependencies for new releases and changelog updates; produces a local markdown digest with change tiers |
 
 ## Typical Workflow
 
@@ -34,6 +60,7 @@ Quick start (recommended):
 2. /coding-workflows:create-issue github <desc>       # Create an issue
 3. /coding-workflows:prepare-issue <issue>            # Design + plan + review
 4. /coding-workflows:execute-issue <issue>            # Implement with TDD
+5. /coding-workflows:merge-issue <issue>              # Merge PR + clean up (after human approval)
 ```
 
 Granular control over setup:
@@ -68,10 +95,13 @@ To see what agents are available, check `.claude/agents/*.md`. Each agent file h
 | `coding-workflows:agent-team-protocol` | Governs parallel code execution teams with file ownership, TDD workflow, git coordination, and team lifecycle management |
 | `coding-workflows:asset-discovery` | Discovers existing skills and agents across project, user, and plugin layers and provides similarity heuristics for detecting overlapping assets |
 | `coding-workflows:codebase-analysis` | Criteria for analyzing codebases to inform agent and skill generation |
+| `coding-workflows:complexity-triage` | Complexity assessment framework for routing issues to appropriate preparation depth. Defines triage signals, mode selection criteria, and output templates for solo and lightweight modes. Referenced by prepare-issue before design session dispatch. |
 | `coding-workflows:deliberation-protocol` | Governs multi-round specialist deliberation for design sessions, plan reviews, and adversarial dispatch |
 | `coding-workflows:issue-workflow` | Structured workflow for planning and executing GitHub issues |
 | `coding-workflows:issue-writer` | Writes requirements-focused issues that describe what needs to be done, not how to implement it. Works with any tracker (GitHub, Linear, Jira, Asana). |
+| `coding-workflows:knowledge-freshness` | Staleness triage framework for evaluating when training data is reliable vs. when verification is required |
 | `coding-workflows:pr-review` | Framework for reviewing pull requests with severity-tiered findings, ecosystem-adapted focus areas, and strict exit criteria |
+| `coding-workflows:skill-creator` | Guides creation of effective skills that extend Claude with specialized knowledge, workflows, or tool integrations. Covers skill anatomy, frontmatter fields, bundled resources, progressive disclosure, and the init/edit/package lifecycle. Use when: creating a new skill, updating an existing skill, understanding skill structure, or packaging skills for distribution. |
 | `coding-workflows:stack-detection` | Technology stack detection reference tables and per-stack analysis guidance. Maps project files to languages, dependencies to frameworks, and directory structures to domains |
 | `coding-workflows:systematic-debugging` | Structured debugging methodology for hypothesis-driven failure resolution. Encodes failure classification, evidence hierarchy, hypothesis quality criteria, and escalation thresholds |
 | `coding-workflows:tdd-patterns` | Stack-aware TDD patterns, anti-patterns, and quality heuristics for test-driven development |

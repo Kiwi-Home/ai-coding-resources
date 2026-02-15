@@ -4,10 +4,6 @@ description: |
   Criteria for analyzing codebases to inform agent and skill generation.
   Encodes signal hierarchy, specialist indicators, and domain significance evaluation.
   Use when: generating agents, generating skills, or evaluating project setup.
-triggers:
-  - generating agents
-  - generating skills
-  - analyzing codebase
 domains: [analysis, generation, patterns, domain-identification]
 ---
 
@@ -152,21 +148,9 @@ Quality criteria for analysis output consumed by generator commands.
 - Unfamiliarity flags: library/domain name, reason (novel/version/domain signal), usage evidence (file count + key file)
 - Coverage gaps: which domains lack agents or skills
 
-**Note:** When generating both asset types in a single pass (via `/coding-workflows:generate-assets`), run analysis once and extract both deliverable sets below.
+**Note:** When generating both asset types in a single pass (via `/coding-workflows:generate-assets`), run analysis once and extract both deliverable sets.
 
-### For Agent Generation
-
-What the agent generation phase needs from analysis:
-- Role signals: which domains warrant architect vs reviewer vs specialist
-- Cross-cutting concerns: domains that span multiple modules (security, observability)
-- Checklist material: domain-specific review items from observed patterns
-
-### For Skill Generation
-
-What the skill generation phase needs from analysis:
-- Validation criteria: what rules can be checked programmatically
-- Pattern catalog: which patterns repeat across the codebase
-- Anti-pattern signals: what mistakes are likely in each domain
+See `references/generation-deliverables.md` for generator-specific deliverable requirements. Read it when running `/coding-workflows:generate-assets` to understand what the generation phase needs from analysis.
 
 ---
 
@@ -207,3 +191,4 @@ Staleness is evaluated per-asset by comparing the asset's `domains` array agains
 - `coding-workflows:asset-discovery` -- Overlap detection and provenance-aware discovery. Check BEFORE proposing new agents/skills. References this skill's staleness criteria during domain-comparison staleness detection.
 - `coding-workflows:agent-patterns` -- Agent metadata spec (name, domains, role, skills) and provenance fields (generated_by, generated_at). For formatting proposals and staleness detection
 Naming constraints for agent names are documented in project-level validation skills when available.
+- `coding-workflows:knowledge-freshness` -- staleness triage for evaluating when training data is reliable

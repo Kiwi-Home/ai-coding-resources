@@ -5,12 +5,6 @@ description: |
   Encodes failure classification, evidence hierarchy, hypothesis quality criteria,
   and escalation thresholds. Use when repeated failures occur during test-driven
   development, full suite validation, or CI failure loops.
-triggers:
-  - repeated test failure
-  - same error after fix attempt
-  - debugging stuck
-  - hypothesis testing
-  - failure diagnosis
 domains: [debugging, testing, diagnosis, failure-resolution]
 ---
 
@@ -93,31 +87,9 @@ If a failure matches multiple classes, classify by the **strongest signal** and 
 
 ## Evidence Hierarchy
 
-Not all diagnostic evidence is equal. Prioritize gathering high-signal evidence before acting on lower-signal information.
-
-| Quality | Evidence Type | Example |
-|---------|--------------|---------|
-| **High-signal** | Exact error message + stack trace | `TypeError: Cannot read property 'id' of undefined at UserService.js:42` |
-| **High-signal** | Minimal reproduction | "Fails when input array is empty, passes for any non-empty array" |
-| **High-signal** | Git bisect result | "First failure introduced in commit `abc123` which changed the auth middleware" |
-| **Medium-signal** | Logs showing state at failure point | "Request payload was `{user: null}` at the point of failure" |
-| **Medium-signal** | Related test results | "All user tests pass but all admin tests fail -- suggests permission layer issue" |
-| **Low-signal** | "It works on my machine" | Environment difference, not a diagnosis |
-| **Low-signal** | "I think it might be..." | Hypothesis without evidence |
-| **Low-signal** | "I'm confident this will fix it" | Confidence is not evidence |
-
 **Rule:** Never act on low-signal evidence alone. Always gather at least one high-signal item before forming hypotheses.
 
-### Combining Signals
-
-Individual signals are useful; combined signals are diagnostic. Look for convergent evidence:
-
-- **Error message + related test results** = localized vs systemic classification
-- **Stack trace + git log** = regression identification (did the failing frame change recently?)
-- **Expected/actual output + data trace** = pinpoint the divergence step
-- **CI environment + local environment** = environment class confirmation
-
-When two high-signal items point to the same cause, that hypothesis should rank first. When signals conflict, gather more evidence before hypothesizing.
+See `references/evidence-hierarchy.md` for the full evidence quality table and signal-combining guidance. Read it when gathering diagnostic evidence to rank by signal quality.
 
 ---
 
@@ -168,7 +140,7 @@ For non-deterministic failures, the "reproduced-before/absent-after" criterion r
 
 ## Debugging Terminal Condition
 
-After the debugging protocol is invoked, you get **2 additional structured attempts** (hypothesis-test-validate cycles following this skill's methodology). If neither resolves the failure, escalate to human with the Escalation Report Template below.
+After the debugging protocol is invoked, you get **2 additional structured attempts** (hypothesis-test-validate cycles following this skill's methodology). If neither resolves the failure, escalate to human with the Escalation Report Template (see `references/escalation-template.md`).
 
 This prevents infinite debugging loops. The total attempt budget per phase:
 - **Attempts 1-2:** Normal iteration (pre-skill, handled by `execute-issue`)
@@ -191,29 +163,7 @@ When to stop debugging and ask the human.
 
 **Key distinction:** Conditions 1-4 are debugging escalations (you don't know how to fix it). Condition 5 is a plan escalation (the fix is correct but the plan is wrong). These trigger different protocols.
 
-### Escalation Report Template
-
-When escalating, provide this information so the human can act on it without re-investigating from scratch.
-
-A good escalation report eliminates duplicate work by documenting what was already tried and why it didn't work.
-
-```
-## Debugging Escalation
-
-**Failing test:** [test name and file]
-**Failure class:** [from classification framework]
-
-**Evidence gathered:**
-- [item from Evidence Collection Gate]
-- [item]
-
-**Hypotheses tested:**
-1. [Hypothesis] -- [Result: confirmed/eliminated] -- [Evidence]
-2. [Hypothesis] -- [Result] -- [Evidence]
-
-**Current best guess:** [most likely remaining cause]
-**Why I'm stuck:** [what specifically blocks further progress]
-```
+See `references/escalation-template.md` for the report format. Read it when preparing to escalate to a human after exhausting structured debugging attempts.
 
 ---
 

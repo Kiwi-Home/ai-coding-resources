@@ -4,10 +4,6 @@ description: |
   Documents agent frontmatter metadata spec and patterns for creating effective
   project-specific agents. Use when: creating agents, understanding agent
   discovery, or configuring agent metadata.
-triggers:
-  - creating agents
-  - agent frontmatter
-  - agent discovery
 domains: [agents, discovery, frontmatter]
 ---
 
@@ -39,19 +35,9 @@ Run `/coding-workflows:setup` for full project initialization, or `/coding-workf
 
 ---
 
-## Frontmatter Metadata Spec (v1)
+## Official Frontmatter Fields
 
-Agent files use YAML frontmatter with these fields:
-
-```yaml
----
-name: my-reviewer
-description: "Reviews database patterns and schema design..."
-tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
-domains: [storage, database, schema, vectors, sqlite]
-role: reviewer
----
-```
+Agent files use YAML frontmatter. Fields are separated into two tiers: required fields that every agent needs, and configuration fields that customize agent behavior.
 
 ### Required Fields
 
@@ -60,47 +46,78 @@ role: reviewer
 | `name` | string | Agent identifier (used in dispatch and messaging). Naming constraints are documented in project-level validation skills when available. |
 | `description` | string | What this agent does (used as fallback for matching) |
 
-### Discovery Fields (v1)
+### Configuration Fields
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `domains` | list[string] | `[]` | Keywords this agent covers. Used for matching against issue content. |
-| `role` | string | `specialist` | One of: `specialist`, `reviewer`, `architect`. Affects dispatch priority. |
+| `tools` | string or array | *(inherits all)* | Tools available to this agent. When present, restricts to the listed tools. Omitting inherits all tools. |
+| `disallowedTools` | string or array | *(none)* | Tools to remove from the agent's available set. |
+| `model` | string | *(inherit)* | Model override for this agent (`haiku`, `sonnet`, `opus`). |
+| `permissionMode` | string | `default` | Controls how the agent handles permission prompts. |
+| `maxTurns` | integer | *(unlimited)* | Maximum agentic turns before stopping. |
+| `skills` | list[string] | `[]` | Skills injected into agent context at startup. Full content is loaded, not referenced. Affects context budget. |
+| `mcpServers` | object | *(none)* | MCP server configurations available to this agent. |
+| `hooks` | object | *(none)* | Lifecycle hooks triggered by agent events. |
+| `memory` | object | *(none)* | Persistent memory configuration across sessions. |
+| `color` | string | *(none)* | Display color in the `/agents` UI. See Claude Code docs for valid values. |
 
-### Configuration Fields (v1)
+**WARNING -- `skills` injects full content:**
+The `skills:` field causes each listed skill's entire SKILL.md content to be loaded into the agent's context window at startup. This is NOT informational metadata. Agents do NOT inherit skills from their parent context. The recommended aggregate budget is ~5,000 tokens per agent across all listed skills. The `/coding-workflows:generate-assets` command includes universal skills (e.g., `plugin:coding-workflows:knowledge-freshness`) that consume a fixed baseline; remaining budget is for domain-specific skills.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `tools` | string (comma-separated) or array | *(inherits all)* | Tools available to this agent when dispatched. When present, restricts the agent to the listed tools. Omitting the field inherits all tools. Generated agents use the comma-separated string form. Users may add or remove tools freely. For platform-level validation rules, see the `plugin-validation` skill. |
-| `skills` | list[string] | `[]` | Skills this agent should preload when dispatched. Informational metadata for tooling and documentation. |
-
-**`tools` parsing:** Tool names are split on commas. Leading and trailing whitespace around each name is trimmed. Trailing commas are ignored. Tool names are case-sensitive (e.g., `Read` not `read`). YAML array syntax (`tools: [Read, Grep]`) is also accepted.
-
-**Naming convention**:
+**`skills` naming convention:**
 - Project skills: bare name (`billing-patterns`)
 - Plugin skills: `plugin:namespace:name` (`plugin:coding-workflows:issue-workflow`)
 - User-layer skills: bare name with `@user` suffix (`my-skill@user`) -- only needed to disambiguate when a project skill exists with the same name
 
-**NOT a source of truth**: `skills` is informational, like `generated_at`. Both the `skills` frontmatter list and the "Skills You Should Reference" markdown section are written at generation time as parallel representations. Neither is "derived" from the other. Users may edit either independently. Staleness detection does not compare them.
+**Runtime tolerance:** If a skill in `skills` cannot be found at dispatch time, the agent operates without it. No error is raised.
 
-**Reference integrity at generation time**: When populating `skills`, only include skills that actually exist. In `agents`-only mode, only reference project/plugin skills that are already present. Absent skills are omitted (not speculatively populated). A warning is logged: "Skill `X` would be relevant for agent `Y` but does not exist. Run `/coding-workflows:generate-assets skills` first."
+**`tools` parsing:** Tool names are split on commas. Leading and trailing whitespace is trimmed. Trailing commas are ignored. Tool names are case-sensitive (e.g., `Read` not `read`). YAML array syntax (`tools: [Read, Grep]`) is also accepted.
 
-**Runtime tolerance**: If a skill in `skills` cannot be found at dispatch time, the agent operates without it. No error is raised. This is consistent with how `domains` matching works -- advisory, not contractual.
-
-**Example:**
-
-```yaml
 ---
-name: billing-reviewer
-domains: [billing, payments, subscriptions]
-skills:
-  - billing-patterns          # project-level skill
-  - payment-validation        # project-level skill
-  - plugin:coding-workflows:issue-workflow  # plugin skill (namespaced)
----
-```
 
-### Tool Configuration Patterns
+## Configuration Guidance
+
+### `model` Selection
+
+| Value | When to Use |
+|-------|-------------|
+| `haiku` | Simple tasks: linting, formatting checks, boilerplate generation |
+| `sonnet` | Standard tasks: code review, implementation, testing |
+| `opus` | Complex tasks: architecture review, cross-cutting analysis, nuanced judgment |
+| *(omit)* | Inherits from parent context. Recommended default. |
+
+### `permissionMode` Values
+
+| Mode | Behavior | Security Note |
+|------|----------|---------------|
+| `default` | Prompts for permission | Safest. Recommended for reviewers. |
+| `acceptEdits` | Auto-accepts file edits | Good for execution agents. |
+| `delegate` | Coordination-only | For agent team leads. |
+| `dontAsk` | Auto-denies permission prompts | Explicitly allowed tools still work. |
+| `bypassPermissions` | Skips all permission checks | High risk. Only for CI/automation. |
+| `plan` | Read-only exploration | For planning/research agents. |
+
+### `maxTurns` Guidance
+
+Use `maxTurns` to bound runaway execution. Useful for review agents (where a bounded check is sufficient) and CI agents (where infinite loops are costly). Omit for execution agents that need flexibility to complete complex implementations.
+
+### `memory` Scopes
+
+| Scope | Persists Across | Use Case |
+|-------|-----------------|----------|
+| `user` | All projects for this user | Personal preferences, global patterns |
+| `project` | All sessions in this project | Project conventions, settled decisions |
+| `local` | Local machine only | Machine-specific configuration |
+
+### Complex Fields
+
+**`hooks`**: Lifecycle hooks triggered by agent events (e.g., `PostToolUse`, `PreToolUse`). See [official Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for hook configuration syntax.
+
+**`mcpServers`**: MCP server configurations scoped to this agent. Same syntax as project-level `.claude/settings.json` MCP configuration. See [MCP documentation](https://modelcontextprotocol.io/) for server setup.
+
+---
+
+## Tool Configuration Patterns
 
 The `tools` field distinguishes agent capabilities:
 
@@ -109,12 +126,28 @@ The `tools` field distinguishes agent capabilities:
 | Review-only | `Read, Grep, Glob, SendMessage, TaskUpdate, TaskList` | Agents that inspect code but never modify it. Safer for adversarial review dispatch. |
 | Execution-capable | `Read, Grep, Glob, Bash, Write, Edit, SendMessage, TaskUpdate, TaskList` | Agents that implement changes. Used by `/coding-workflows:execute-issue` for TDD loops. |
 | Full access | *(omit field)* | Inherits all available tools. Suitable for general-purpose agents. |
+| Everything except | *(omit `tools`)* + `disallowedTools: Write, Edit` | "All tools except these." Cleaner than verbose allowlists. |
+
+**`tools` and `disallowedTools` interaction:** When both are specified, `disallowedTools` removes tools from the `tools` list. When only `disallowedTools` is specified (no `tools` field), it removes from inherited tools. This lets you express "everything except X" without listing every tool.
 
 **Why Bash matters:** Including `Bash` grants shell execution capability (running tests, linters, build commands). Review-only agents intentionally omit `Bash` (and `Write`/`Edit`) to ensure they can only observe, not modify. This is a trust boundary, not just a convenience.
 
 **Anti-pattern:** Do not include `Bash` on review-only agents "just in case." If an agent's role is `reviewer`, its tool set should reflect read-only access unless the review workflow requires running tests or linters.
 
-### Role Semantics
+---
+
+## Plugin Extension Fields
+
+These fields are read by the plugin's workflow commands (agent discovery, generation, staleness detection), not by the Claude Code runtime.
+
+### Discovery Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `domains` | list[string] | `[]` | Keywords this agent covers. Used for matching against issue content. |
+| `role` | string | `specialist` | One of: `specialist`, `reviewer`, `architect`. Affects dispatch priority. |
+
+#### Role Semantics
 
 | Role | Dispatch Behavior |
 |------|-------------------|
@@ -122,7 +155,7 @@ The `tools` field distinguishes agent capabilities:
 | `reviewer` | Invoked for code review and plan critique. May be dispatched adversarially. |
 | `architect` | Invoked for cross-cutting concerns. Higher authority in conflict resolution. |
 
-### Provenance Fields (v1) -- Agents and Skills
+### Provenance Fields -- Agents and Skills
 
 > **Authoritative definition.** This is the canonical reference for provenance fields. Other skills (`asset-discovery`, `codebase-analysis`) reference these definitions for classification and staleness detection.
 
@@ -141,7 +174,7 @@ These fields apply to both agent files (`.claude/agents/*.md`) and skill files (
 name: billing-reviewer
 description: "Reviews billing domain patterns..."
 domains: [billing, payments, subscriptions]
-skills: [billing-patterns, plugin:coding-workflows:issue-workflow]
+skills: [plugin:coding-workflows:knowledge-freshness, billing-patterns, plugin:coding-workflows:issue-workflow]
 role: reviewer
 generated_by: generate-assets
 generated_at: "2026-02-08"
@@ -182,120 +215,17 @@ These fields are planned but not yet used by workflow commands:
 
 ---
 
-## Agent File Structure
-
-A well-defined agent file has these sections:
-
-```markdown
----
-name: api-reviewer
-description: "Reviews API patterns, async code, and request handling"
-tools: Read, Grep, Glob, Bash, SendMessage, TaskUpdate, TaskList
-domains: [api, routes, async, http, endpoints, middleware]
-role: reviewer
----
-
-# API Reviewer
-
-## Your Role
-Review API code for correctness, performance, and consistency with project patterns.
-
-## Project Conventions
-- [Framework]-specific patterns to enforce
-- Error handling conventions
-- Authentication/authorization patterns
-
-## Settled Decisions
-Decisions that are NOT up for debate:
-- [Decision 1]: [rationale]
-- [Decision 2]: [rationale]
-
-## Review Checklist
-- [ ] Endpoints follow naming convention
-- [ ] Error responses use standard format
-- [ ] Input validation on all external inputs
-- [ ] Tests cover happy path and error cases
-
-## Skills You Should Reference
-- [Relevant skill names from project]
-```
-
----
-
-## Examples by Tech Stack
-
-### Python / FastAPI
-
-```yaml
-domains: [api, fastapi, routes, pydantic, async, middleware]
-role: reviewer
-```
-
-Key review areas: async patterns, Pydantic model design, dependency injection, error handling, type hints.
-
-### TypeScript / Next.js
-
-```yaml
-domains: [pages, components, api-routes, server-actions, middleware]
-role: reviewer
-```
-
-Key review areas: server vs client components, data fetching patterns, type safety, bundle size.
-
-### Ruby / Rails
-
-```yaml
-domains: [models, controllers, services, jobs, migrations]
-role: reviewer
-```
-
-Key review areas: ActiveRecord patterns, N+1 queries, service objects, background jobs.
-
-### Rust / Actix
-
-```yaml
-domains: [handlers, middleware, state, extractors, database]
-role: reviewer
-```
-
-Key review areas: ownership patterns, error handling with `thiserror`, async runtime, type safety.
-
-### Go / Standard Library
-
-```yaml
-domains: [handlers, middleware, repository, service, grpc]
-role: reviewer
-```
-
-Key review areas: error wrapping, context propagation, interface design, goroutine safety.
+See `references/agent-template.md` for a complete agent file template with all sections. Read it when creating a new agent or reviewing agent file completeness.
 
 ---
 
 ## What Makes Agents Effective
 
-### High-Value Agent Content
+**High-value content:** Project-specific conventions not in CLAUDE.md, settled decisions that should never be re-debated, common codebase gotchas, review checklists tuned to actual past issues.
 
-1. **Project-specific conventions** that aren't in CLAUDE.md
-2. **Settled decisions** that should never be re-debated
-3. **Common gotchas** specific to the codebase
-4. **Review checklists** tuned to actual past issues
+**Low-value content:** Generic language/framework advice (Claude already knows this), copy-pasted library docs, overly broad domain coverage, implementation instructions (agents review, they don't implement).
 
-### Low-Value Agent Content
-
-1. Generic language/framework advice (Claude already knows this)
-2. Copy-pasted documentation from libraries
-3. Overly broad domain coverage (better to have focused agents)
-4. Implementation instructions (agents review, they don't implement)
-
-### Scaffolding vs Hand-Tuned
-
-Generated agents (from `/coding-workflows:generate-assets`) provide scaffolding with TODO placeholders. **Hand-edited agents with project-specific knowledge are significantly more effective.**
-
-The progression:
-1. Generate scaffolding with `/coding-workflows:generate-assets`
-2. Fill in project conventions and settled decisions
-3. Add review checklists based on past code review feedback
-4. Iterate as the project evolves
+Generated agents from `/coding-workflows:generate-assets` provide scaffolding. Hand-edit them with project-specific knowledge for significantly better results.
 
 ---
 

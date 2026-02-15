@@ -19,7 +19,7 @@ args:
 ## Step 0: Resolve Project Context (MANDATORY)
 
 1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Proceed to step 3.
+   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
    - If file does not exist: proceed to step 2.
 
 2. **Auto-detect (zero-config fallback):**
@@ -31,6 +31,7 @@ args:
 3. **Validate resolved context:**
    - `project.org` and `project.name` must be non-empty (stop if missing)
    - If `{{platform}}` is `github`: `git_provider` must be `github` (stop with message if not). For other platforms: skip `git_provider` check — unlike sibling commands that always post to GitHub issues, this command targets the user's chosen tracker.
+   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
@@ -38,7 +39,7 @@ args:
 
 ## Step 1: Read the Skill (MANDATORY)
 
-Use the Read tool to read the `coding-workflows:issue-writer` skill (`skills/issue-writer/SKILL.md`) bundled with this plugin. If the skill file doesn't exist, proceed without it and note the missing skill.
+Use the Read tool to read the `coding-workflows:issue-writer` skill bundled with this plugin. If the skill file doesn't exist, proceed without it and note the missing skill.
 
 Do not proceed until you have read it (or confirmed it's missing).
 
@@ -79,12 +80,16 @@ Return the issue URL when complete.
 
 ## Error Handling
 
+**Target safety applies.** On any creation failure, the workflow stops and reports — it never substitutes a different target. See the `coding-workflows:issue-workflow` skill's Target Safety section.
+
 | Error | Action |
 |-------|--------|
 | Config file missing + auto-detect fails | Ask user for org, repo, and platform-specific identifiers |
 | `project.org` or `project.name` empty | Stop with message; ask user to provide values or create `workflow.yaml` |
 | `git_provider` mismatch (GitHub platform) | Stop with message explaining the config says a different provider |
-| CLI failure (gh/linear) | Present the formatted issue body for manual creation; include the failed command |
-| MCP tool not available (Jira/Asana) | Present the formatted issue body; suggest creating in the web UI |
-| MCP tool call fails | Present the formatted issue body with error details |
+| CLI not installed (`gh`/`linear` not found) | Stop. Present the formatted issue body for manual creation. Suggest installing the CLI tool. |
+| CLI failure (gh/linear) | Stop. Present: (1) the error message, (2) the target that was attempted and where it was resolved from (`workflow.yaml` or auto-detect), (3) the failed CLI command for retry, (4) the formatted issue body for manual creation. Best-effort diagnostic hint: repository not found → check `project.org`/`project.name` in `workflow.yaml`; authentication/permission error → check `gh auth status` and repo access; transient error (timeout, rate limit) → suggest retrying the same command. **Do NOT retry with a different target or without the `--repo` flag.** |
+| MCP tool not available (Jira/Asana) | Stop. Present the formatted issue body; suggest creating in the web UI. |
+| MCP tool call fails (Jira/Asana) | Stop. Present: (1) the MCP error message as-is, (2) the target that was attempted, (3) the formatted issue body for manual creation. Suggest checking MCP server configuration. **Do NOT attempt a different platform or target.** |
 | Platform not recognized | Stop with message listing supported platforms: github, linear, jira, asana |
+| Partial success (created but URL not captured) | Report success, suggest checking the target's issue list for the newly created issue. Do NOT re-create. |

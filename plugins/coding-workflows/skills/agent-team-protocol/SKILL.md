@@ -3,12 +3,10 @@ name: agent-team-protocol
 description: >
   Governs parallel code execution teams with file ownership, TDD workflow,
   git coordination, and team lifecycle management. Defines spawn templates,
-  timeout policies, and shutdown procedures.
-triggers:
-  - /coding-workflows:execute-issue
+  timeout policies, and shutdown procedures. Referenced during parallel
+  execution phases of issue implementation.
 domains: [execution, agent-teams]
 user-invocable: false
-disable-model-invocation: true
 ---
 
 # Agent Team Protocol

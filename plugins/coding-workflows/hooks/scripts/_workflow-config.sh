@@ -33,15 +33,26 @@ except:
 
 # --- Hook disable variable naming convention ---
 # Env var pattern: CODING_WORKFLOWS_DISABLE_HOOK_{HOOK_NAME}
-# Convention: strip .sh extension, replace hyphens with underscores, UPPER_CASE.
-# Two exceptions shorten the name for readability:
 #
-#   Script filename                     → HOOK_NAME
-#   test-evidence-logger.sh             → TEST_EVIDENCE_LOGGER
-#   deferred-work-scanner.sh            → DEFERRED_WORK_SCANNER
-#   stop-deferred-work-check.sh         → STOP_DEFERRED_WORK  (not STOP_DEFERRED_WORK_CHECK)
-#   execute-issue-completion-gate.sh    → EXECUTE_ISSUE_COMPLETION_GATE
-#   check-agent-output-completeness.sh  → AGENT_OUTPUT_COMPLETENESS  (not CHECK_AGENT_OUTPUT_COMPLETENESS)
+# Derivation rules (applied in order):
+#   1. Strip .sh extension
+#   2. Replace hyphens with underscores, convert to UPPER_CASE
+#   3. Drop "CHECK" -- remove leading CHECK_ prefix or trailing _CHECK suffix
+#      (the word "check" is implementation noise, not descriptive of what the hook protects)
+#
+# Rule 3 explains all shortened names without ad-hoc exceptions:
+#
+#   Script filename                     → After rule 2            → After rule 3 (HOOK_NAME)
+#   check-dependency-version.sh         → CHECK_DEPENDENCY_VERSION → DEPENDENCY_VERSION (*)
+#   check-agent-output-completeness.sh  → CHECK_AGENT_OUTPUT_...   → AGENT_OUTPUT_COMPLETENESS
+#   stop-deferred-work-check.sh         → STOP_DEFERRED_WORK_CHECK → STOP_DEFERRED_WORK
+#   test-evidence-logger.sh             → TEST_EVIDENCE_LOGGER     → TEST_EVIDENCE_LOGGER (no change)
+#   deferred-work-scanner.sh            → DEFERRED_WORK_SCANNER    → DEFERRED_WORK_SCANNER (no change)
+#   execute-issue-completion-gate.sh    → EXECUTE_ISSUE_COMP...     → EXECUTE_ISSUE_COMPLETION_GATE (no change)
+#
+#   (*) check-dependency-version uses DEPENDENCY_VERSION_CHECK (CHECK moved to suffix)
+#       for semantic clarity: the hook checks that a version was provided.
+#       This is the sole exception to rule 3's mechanical stripping.
 
 # Per-hook disable check.
 # Usage: check_disabled "STOP_DEFERRED_WORK" && return 0
@@ -289,9 +300,16 @@ has_section() {
 }
 
 # --- Default branch detection ---
+# Optional parameter: remote name (default: origin).
+# Identity remote = the remote used for org/repo resolution (from
+# workflow.yaml project.remote), distinct from the push target.
+# Callers that know the identity remote pass it explicitly;
+# existing callers with no argument get origin behavior.
 get_default_branch() {
+  local remote_name="${1:-origin}"
   local default_branch
-  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+  default_branch=$(git symbolic-ref "refs/remotes/${remote_name}/HEAD" 2>/dev/null \
+    | sed "s|refs/remotes/${remote_name}/||")
   if [ -z "$default_branch" ]; then
     if git show-ref --verify --quiet refs/heads/main 2>/dev/null; then
       default_branch="main"
@@ -300,4 +318,97 @@ get_default_branch() {
     fi
   fi
   echo "$default_branch"
+}
+
+# --- PreToolUse output helpers ---
+# PreToolUse hooks use hookSpecificOutput with permissionDecision (allow/deny/ask)
+# and top-level systemMessage. This differs from PostToolUse/Stop hooks which use
+# additionalContext inside hookSpecificOutput or top-level decision/reason.
+
+# Advisory: inject context but allow the command to proceed.
+# Usage: pretool_advisory "Warning message"
+pretool_advisory() {
+  local msg="$1"
+  local escaped
+  escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+  cat <<HOOKJSON
+{
+  "hookSpecificOutput": {
+    "permissionDecision": "allow"
+  },
+  "systemMessage": "${escaped}"
+}
+HOOKJSON
+  exit $HOOK_ALLOW
+}
+
+# Deny: block the tool call with a reason shown to Claude.
+# Usage: pretool_deny "Reason for blocking"
+pretool_deny() {
+  local msg="$1"
+  local escaped
+  escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+  cat <<HOOKJSON
+{
+  "hookSpecificOutput": {
+    "permissionDecision": "deny"
+  },
+  "systemMessage": "${escaped}"
+}
+HOOKJSON
+  exit $HOOK_ALLOW
+}
+
+# --- YAML array reader ---
+# Read a YAML array under a section key.
+# Returns one item per line. Empty output = no items or section not found.
+# Supports block format only (- item). Flow format ([a, b]) is NOT supported.
+# Usage: read_yaml_array "$yaml_path" "check_dependency_version" "allowlist"
+read_yaml_array() {
+  local yaml_path="$1" section="$2" key="$3"
+  # Pipeline may fail if section/key not found. The || true ensures
+  # a clean exit under set -euo pipefail (the caller gets empty output).
+  grep -A100 "${section}:" "$yaml_path" 2>/dev/null \
+    | grep -A100 "${key}:" \
+    | tail -n +2 \
+    | while IFS= read -r line; do
+        # Stop at next non-array line (not starting with whitespace+dash)
+        echo "$line" | grep -qE '^[[:space:]]*-' || break
+        echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*//' | sed 's/[[:space:]]*$//'
+      done || true
+}
+
+# --- Dependency version check config readers ---
+
+# Get dependency check mode from workflow.yaml.
+# Returns "warn" (default) or "block".
+get_dependency_check_mode() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo "warn"; return 0; }
+  local value
+  # || true ensures clean exit if section not found in workflow.yaml
+  value=$(grep -A10 'check_dependency_version:' "$yaml_path" 2>/dev/null \
+    | grep '[[:space:]]*mode:' | head -1 \
+    | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*$//' \
+    | tr '[:upper:]' '[:lower:]' || true)
+  if [ "$value" = "block" ]; then echo "block"; else echo "warn"; fi
+}
+
+# Get dependency check allowlist from workflow.yaml.
+# Returns one package name per line. Empty if not configured.
+get_dependency_check_allowlist() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && return 0
+  read_yaml_array "$yaml_path" "check_dependency_version" "allowlist"
+}
+
+# Get dependency check package manager filter from workflow.yaml.
+# Returns one PM name per line. Empty = all supported PMs.
+get_dependency_check_package_managers() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && return 0
+  read_yaml_array "$yaml_path" "check_dependency_version" "package_managers"
 }

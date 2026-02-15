@@ -1,0 +1,79 @@
+# Upstream Sources Configuration
+# Defines dependencies to monitor for new releases and changelog updates.
+# Used by /coding-workflows:check-updates to detect upstream changes.
+# For full source type documentation, see /coding-workflows:check-updates
+#
+# Copy this file to .claude/upstream-sources.yaml and customize:
+#   cp plugins/coding-workflows/templates/upstream-sources.yaml .claude/upstream-sources.yaml
+#
+# Schema version (for future migration support)
+version: 1
+
+sources:
+  # ─── GitHub Releases ──────────────────────────────────────────────────────
+  # Checks the latest release via GitHub API (unauthenticated, 60 req/hr limit).
+  # Uses: GET /repos/{owner}/{repo}/releases/latest
+  #
+  # Required fields: name, type, repo
+  # The `repo` field is "owner/repo" format. Use `self` to resolve from
+  # .claude/workflow.yaml or git remote (e.g., monitor your own project's releases).
+
+  # - name: mlx-lm
+  #   type: github-release
+  #   repo: ml-explore/mlx-lm
+  #   relevance: "Core MLX inference and LoRA training"
+
+  # - name: my-project
+  #   type: github-release
+  #   repo: self                       # Resolves from workflow.yaml or git remote
+  #   relevance: "This project's own releases"
+
+  # ─── npm Packages ────────────────────────────────────────────────────────
+  # Checks the latest version via npm registry JSON API.
+  # Uses: GET https://registry.npmjs.org/{package}
+  #
+  # Required fields: name, type, package
+
+  # - name: vite
+  #   type: npm
+  #   package: vite
+  #   relevance: "Build tool"
+
+  # ─── PyPI Packages ────────────────────────────────────────────────────────
+  # Checks the latest version via PyPI JSON API.
+  # Uses: GET https://pypi.org/pypi/{package}/json
+  #
+  # Required fields: name, type, package
+
+  # - name: fastapi
+  #   type: pypi
+  #   package: fastapi
+  #   relevance: "Web framework -- route patterns, middleware"
+
+  # ─── Changelog URLs ───────────────────────────────────────────────────────
+  # Fetches a URL and computes a content hash to detect changes.
+  # Uses: WebFetch (fallback: curl). Best for static HTML changelogs.
+  # Note: Pages requiring JavaScript rendering may return empty content.
+  #
+  # Required fields: name, type, url
+
+  # - name: claude-code-docs
+  #   type: changelog-url
+  #   url: https://docs.anthropic.com/en/docs/claude-code/changelog
+  #   relevance: "Agent/skill/hook spec changes"
+
+  # ─── Optional Fields ──────────────────────────────────────────────────────
+  #
+  # relevance: (string) Free text describing why this source matters.
+  #   Shown in the digest output to help prioritize review.
+  #
+  # affects: (array) Asset names for guaranteed matching in the digest.
+  #   Bypasses the automatic keyword-bag heuristic. Use when auto-matching
+  #   would miss a known dependency.
+  #
+  # Example with affects:
+  # - name: pydantic
+  #   type: pypi
+  #   package: pydantic
+  #   relevance: "Data validation across all services"
+  #   affects: [api-patterns, data-patterns, api-reviewer]

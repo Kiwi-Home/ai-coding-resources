@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.1.1 — 2026-02-15
+
+### New commands
+
+- **check-updates** — Check upstream dependencies for new releases and changelog updates.
+- **cleanup-worktree** — Remove worktree and branch for a completed issue with unmerged-changes safety check.
+- **execute-issue-worktree** — Execute a planned+reviewed issue in an isolated git worktree.
+- **merge-issue** — Merge a PR and clean up branch + worktree for a completed issue.
+
+### New hook
+
+- **check-dependency-version** — PreToolUse hook that warns when dependency-add commands lack version pins.
+
+### New skills
+
+- **complexity-triage** — Complexity assessment framework for routing issues to appropriate preparation depth.
+- **knowledge-freshness** — Staleness triage framework for evaluating when training data is reliable vs. when verification is required.
+- **skill-creator** — Guides creation of effective skills with specialized knowledge, workflows, or tool integrations. Includes init/validate/package scripts and reference material.
+
+### Skill reference material
+
+New bundled references across skills for deeper content:
+
+- agent-patterns, asset-discovery, codebase-analysis, issue-workflow (4 refs), issue-writer (moved resources/ → references/), pr-review, systematic-debugging (2 refs), tdd-patterns
+
+Supporting files: `templates/upstream-sources.yaml` (registry for check-updates).
+
+### Command improvements
+
+All existing commands updated with cross-cutting improvements:
+
+- Multi-remote support and configurable remote preference for git URL formats
+- Setup improvements: /init recommendation flow, multi-layer asset generation
+- Create-issue: Target Safety principle and hardened error handling
+- PR review: disposition pre-filter, collect-then-file gate, cross-iteration dedup, concurrent CI fix
+- Design-session: reduced token consumption by scoping agent context
+
+### Skill refinements
+
+- Frontmatter standardized: invocation controls, description format
+- Cross-references now use namespace format, not file paths
+- Deliberation protocol: clarified engagement criteria and observability scope
+
+### Hook and configuration updates
+
+- Hook naming convention standardized across documentation
+- Updated `_workflow-config.sh` shared utilities and `hooks.json` registrations
+
 ## 1.1.0 — 2026-02-11
 
 ### Lifecycle hooks

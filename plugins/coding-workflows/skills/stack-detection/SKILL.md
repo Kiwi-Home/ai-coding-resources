@@ -4,11 +4,8 @@ description: |
   Technology stack detection reference tables and per-stack analysis guidance.
   Maps project files to languages, dependencies to frameworks, and directory
   structures to domains. Includes deeper analysis criteria for LLM-driven
-  codebase understanding. Used by setup, generate-assets, and init-config.
-triggers:
-  - detecting technology stack
-  - scanning codebase for languages
-  - identifying project frameworks
+  codebase understanding. Use when detecting a project's technology stack,
+  scanning for languages, or identifying frameworks.
 domains: [detection, stack, language, framework, domain]
 ---
 
