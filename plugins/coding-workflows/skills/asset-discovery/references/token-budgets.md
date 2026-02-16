@@ -63,3 +63,44 @@ penalty.
 | Agents lack domain knowledge they need | Consider increasing the budget or splitting large skills into focused sub-skills |
 | New universal skills added to the workflow | Recalculate the baseline and adjust the remaining domain budget |
 | Context window size increases significantly | The budget may scale proportionally, but re-evaluate based on actual system prompt and tool overhead |
+
+## Skills Population Rules
+
+Rules for populating the `skills:` frontmatter field during agent generation:
+
+- Only reference skills that were **confirmed and generated** in Step 4a, or that already exist (discovered in Step 2).
+- Never reference proposed-but-declined skills.
+- In `agents`-only mode: reference only already-existing skills. For absent skills that would be relevant, log a warning instead.
+- **Domain overlap matching:** Compare agent `domains` against skill `domains` to auto-populate.
+- **Universal skills:** The following plugin skills are included in every
+  execution-capable agent's frontmatter `skills:` (agents with `Write` or
+  `Edit` tools). They guide execution-phase behavior and cannot be inherited
+  from parent context. Review-only agents (no `Write`/`Edit` tools) omit
+  universal skills -- their guidance is not actionable without file modification
+  capability.
+  - `plugin:coding-workflows:knowledge-freshness` (~1,273 tokens)
+- **Domain skills:** Skills matched by domain overlap (agent `domains` vs skill
+  `domains`) are added to frontmatter `skills:` alongside universal skills.
+  All matched skills go in frontmatter -- there is no per-skill size threshold.
+  Per-skill size thresholds were evaluated and removed: a per-skill gate
+  (e.g., 2000 chars) is redundant when the aggregate budget check already
+  caps total injection (see "Why No Per-Skill Size Threshold" above).
+- **Context budget check:** Sum the token estimates of all frontmatter-listed skills
+  (universal + domain). The recommended aggregate budget is ~5,000 tokens per
+  agent. Universal skills consume a fixed baseline (~1,273 tokens for
+  execution-capable agents; 0 for review-only agents), leaving ~3,727 tokens
+  for domain-specific skills on execution-capable agents or ~5,000 tokens on
+  review-only agents. If total exceeds ~5,000
+  tokens, warn during Step 3 agent proposal:
+  "Skills budget: ~{N} tokens ({count} skills).
+   Baseline (universal): ~{U} tokens ({u_count} skills)
+   Domain-specific: ~{D} tokens ({d_count} skills)
+   Exceeds recommended ~5,000 token budget. Consider removing lower-priority
+   domain skills from frontmatter."
+  User may proceed or adjust the domain skills list. Universal skills should
+  not be removed from execution-capable agents. Review-only agents should not
+  include universal skills.
+
+The canonical token estimate for each universal skill is maintained at its
+first occurrence in the universal skills list above (currently the
+`knowledge-freshness` bullet item).

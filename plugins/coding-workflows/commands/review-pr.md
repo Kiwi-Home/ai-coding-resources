@@ -14,24 +14,13 @@ allowed-tools:
 
 # Review PR: {{pr}}
 
-## Step 0: Resolve Project Context
+## Step 0: Resolve Project Context (MANDATORY)
 
-1. Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to validation.
-   - If file does not exist: auto-detect below.
+Read the `coding-workflows:project-context` skill and follow its protocol for resolving project context (reads workflow.yaml, auto-detects project settings, validates configuration). **If the skill file does not exist, STOP:** "Required skill `coding-workflows:project-context` not found. Ensure the coding-workflows plugin is installed."
 
-2. **Auto-detect (zero-config fallback):**
-   - Run `git remote get-url origin` to extract org and repo name
-   - Scan for project files: `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `Gemfile`
-   - Read the `coding-workflows:stack-detection` skill to detect ecosystem (language + framework)
-   - **CONFIRM with user:** "I detected [language] project [org/repo] with ecosystem `[detected]`. Is this correct?" DO NOT proceed without confirmation.
-
-3. **Validate resolved context:**
-   - `project.org` and `project.name` must be non-empty (stop if missing)
-   - `git_provider` must be `github` (stop with message if not)
-   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
-
-4. **Store resolved ecosystem identifier** for use in Step 4 resource lookup.
+**Command-specific overrides:**
+- Use **Ecosystem** auto-detect mode (reads `coding-workflows:stack-detection` for ecosystem detection)
+- Store the resolved ecosystem identifier for use in Step 4 resource lookup
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
@@ -130,8 +119,14 @@ Read the `coding-workflows:pr-review` skill for the universal review framework. 
 - If `.claude/review-config.yaml` exists: apply project-specific focus areas, anti-patterns, and conventions alongside the universal framework
 - If `.claude/review-config.yaml` is missing: apply the skill's universal category definitions only. Note in review header: "Project review config not found. Run `/coding-workflows:generate-assets review-config` for targeted review."
 
+**Security review lens:**
+
+Read the `coding-workflows:security-patterns` skill. If the skill file doesn't exist, proceed without it and note the missing skill.
+
+If the skill was loaded, evaluate its Activation Criteria against the changed file list from Step 3. If criteria are met, apply the skill's Security Review Framework and Quick Reference alongside the universal review categories. Security findings use the skill's Severity Graduation Criteria to determine tier classification. If no activation criteria match, note "Security review: not activated (no security-relevant files in diff)" and proceed.
+
 **Apply review focus by mode:**
-- **COMPREHENSIVE mode**: All four universal categories (Correctness, Integrity, Compliance, Quality) + any project-specific focus from review config
+- **COMPREHENSIVE mode**: All four universal categories (Correctness, Integrity, Compliance, Quality) + any project-specific focus from review config + security review lens (if activated)
 - **VERIFICATION mode**: Only verify previous MUST FIX items are fixed + flag regressions in newly changed lines. Do NOT raise new editorial concerns.
 
 **Categorize all findings** by severity tier (from skill): MUST FIX, FIX NOW, CREATE ISSUE.
@@ -165,52 +160,38 @@ If no linked issue found, skip this section entirely with a note.
 
 ## Step 6: Determine Exit Criteria
 
-Apply strict exit rules from skill:
-- Zero MUST FIX + zero FIX NOW + all CREATE ISSUE items filed → "Ready to merge"
-- If ANY items remain unresolved → "Not ready to merge. [N] items remain: [list them]"
-
-**NEVER use qualified approval language:**
-- "Ready to merge once items are addressed" — NO
-- "LGTM with minor changes" — NO
-- "Approved pending X" — NO
+Apply the Exit Criteria from the `coding-workflows:pr-review` skill (already read in Step 4). The skill defines the strict bright-line rules for merge readiness and the prohibition on qualified approval language.
 
 ---
 
 ## Step 7: CREATE ISSUE Protocol
 
-If any CREATE ISSUE findings exist:
+If any CREATE ISSUE findings exist, follow the CREATE ISSUE Protocol per `coding-workflows:pr-review` (already read in Step 4). Use `{org}/{repo}` and `{pr}` from resolved context.
+
+**Orchestration steps:**
 
 1. **Deduplication check** (before creating anything):
    ```bash
    gh issue list --repo {org}/{repo} --label review-followup --state open --search "PR #{pr}" --json number,title,body
    ```
-   - If result contains an issue whose body includes `PR #{pr_number}`: this PR already has a follow-up issue. Append new findings as a comment on that issue:
-     ```bash
-     gh issue comment {existing_issue_number} --repo {org}/{repo} --body "Additional findings from review iteration {N}:\n\n{new findings}"
-     ```
-     Skip to step 5 (reference in review comment).
-   - If no matching issue found: proceed to step 2.
-   - If query fails (non-zero exit after retry): skip dedup and proceed directly to step 2 (create issue). Add note in the issue body: "Created without dedup verification — may duplicate an existing follow-up issue for this PR. Check for duplicates and consolidate if needed." Add note in the review comment: "Follow-up issue created without dedup verification (query failed). Check for duplicate follow-up issues."
+   - Matching issue found (body contains `PR #{pr_number}`): append as comment
+   - No match: create new issue using template from skill
+   - Query fails: skip dedup, create directly (add dedup failure note per skill)
 
-2. Ensure label exists:
+2. **Ensure label:**
    ```bash
    gh label create review-followup --description "Non-trivial findings from content review" --color "D4A017" --repo {org}/{repo} 2>/dev/null || true
    ```
 
-3. Group ALL CREATE ISSUE findings from this review
+3. **Create/append** using issue body template from skill
 
-4. Create ONE consolidated issue using template from skill:
-   ```bash
-   gh issue create --repo {org}/{repo} --title "[Content Review] <overall theme>" --label "review-followup" --body "<issue body>"
-   ```
-
-5. Reference the issue number (new or existing) in your review comment
+4. **Reference** created issue number in review comment
 
 **Failure modes:**
-- Deduplication query fails → skip dedup, create issue directly (may duplicate; safe fallback)
-- Label creation fails → proceed without label
-- Issue creation fails → post review with error note listing findings inline
-- Issue comment (append) fails → create a new issue instead (degraded dedup)
+- Deduplication query fails -> skip dedup, create directly
+- Label creation fails -> proceed without label
+- Issue creation fails -> post review with error note listing findings inline
+- Comment (append) fails -> create new issue (degraded dedup)
 
 **MANDATORY:** A review that lists CREATE ISSUE findings without creating or appending to an issue is incomplete.
 

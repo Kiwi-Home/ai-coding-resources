@@ -44,6 +44,30 @@ When no conflict overrides are configured: all pairs default to LOW, meaning sin
 
 ---
 
+## Dispatch Mode Comparison
+
+The dispatch mode choice affects token cost in multi-round sessions.
+
+| Dimension | Task-based (default) | Agent-team |
+|-----------|---------------------|------------|
+| **Skill re-injection** | Full agent body + skills every round | Once at spawn |
+| **Round 2+ cost** | Full agent context + conflict summary | Conflict summary only |
+| **Failure mode** | None (self-contained) | TeamCreate failure triggers fallback (see **TeamCreate Failure Fallback** section) |
+
+**Savings formula:** `(rounds - 1) x (sum of all agent definition sizes in tokens)`, where agent definition size is the total tokens in an agent's `.md` file plus its pre-loaded skills. In a 2-round session, this eliminates one full round of agent re-injection — roughly 50% of total agent-definition token spend. In a 3-round session, savings rise to ~66%. Actual savings scale linearly with agent definition size: large agents (many pre-loaded skills) benefit most; minimal agents see smaller absolute gains.
+
+**Decision heuristic:**
+- **Prefer agent-team** when: multi-round conflict is expected AND agent definitions are substantial (multiple pre-loaded skills)
+- **Prefer Task-based** when: single-round sessions are likely, OR agent definitions are small, OR session reliability is prioritized over token cost
+
+**"Substantial" threshold:** An agent definition is "substantial" when its `.md` file is ≥100 lines, OR it pre-loads 2+ skills. Below this threshold, per-round re-injection cost is low and the savings formula yields minimal absolute benefit. *Calibration example:* this repo's agents range from 51-88 lines with 1-2 pre-loaded skills each — below the threshold, making Task-based dispatch the better default.
+
+> **Anti-pattern:** Switching to agent-team mode for single-round (no-conflict) sessions. Single-round sessions have zero re-injection overhead, so agent-team mode adds TeamCreate complexity with no token benefit. A session will be single-round when either condition from the guard clause in `/coding-workflows:design-session` Step 2b is false: fewer than 2 specialists dispatched, OR no HIGH conflict overrides exist for the dispatched pair(s) in `deliberation.conflict_overrides`. When no conflict overrides are configured, all pairs default to LOW, guaranteeing single-round dispatch (see Step 2b for the full algorithm).
+
+> **Trade-offs:** Agent-team mode is experimental (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Persistent context may increase attention drift risk in longer sessions as accumulated context competes for model attention. TeamCreate failure triggers automatic fallback to Task-based dispatch (see **TeamCreate Failure Fallback** section below). Do not choose agent-team mode solely for token savings — evaluate session length and complexity.
+
+---
+
 ## Phase 1: Setup
 
 **Agent-team mode** (when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set):

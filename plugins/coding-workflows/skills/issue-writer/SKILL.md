@@ -1,12 +1,12 @@
 ---
 name: issue-writer
-description: Writes requirements-focused issues that describe what needs to be done, not how to implement it. Works with any tracker (GitHub, Linear, Jira, Asana). Use when creating issues, updating requirements, or planning work.
+description: Writes requirements-focused issues that describe what needs to be done, not how to implement it. Works with any tracker. Use when creating issues, updating requirements, or planning work.
 domains: [issues, requirements]
 ---
 
 # Issue Writer Skill
 
-Write requirements-focused issues that describe **what** needs to be done, not **how** to implement it. Works with any tracker: GitHub, Linear, Jira, Asana, etc.
+Write requirements-focused issues that describe **what** needs to be done, not **how** to implement it. Works with any tracker — the skill focuses on issue quality, not tracker integration.
 
 ## Issue Structure
 

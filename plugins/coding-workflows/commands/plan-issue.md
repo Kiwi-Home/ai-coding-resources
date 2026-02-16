@@ -20,32 +20,28 @@ allowed-tools:
 
 # Plan Issue: {{issue}}
 
-## Step 0: Resolve Project Context (MANDATORY)
+## Steps 0-1: Resolve Context and Read Skill (parallel)
 
-1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
-   - If file does not exist: proceed to step 2.
+<!-- SYNC: preamble-check — keep identical in plan-issue.md, review-plan.md, design-session.md -->
+**Pipeline preamble (optimization cache):** Check if `/tmp/.coding-workflows-preamble-{issue}.yaml`
+exists (where `{issue}` is `{{issue}}` with `#` replaced by `-`). If found, read and validate:
+YAML must parse, `version` must equal `1`, `created_at` must be within 30 minutes, all required
+fields present (`version`, `created_at`, `issue`, `issue_repo`, `project.org`, `project.name`,
+`project.git_provider`, `config_source`), and `preamble.issue` matches `{{issue}}`. If valid,
+adopt resolved values and skip to structural validation: confirm `project.org`/`project.name`
+non-empty, `git_provider` is `github`, and `git remote get-url {project.remote}` succeeds.
+If file not found, parse error, stale, or any validation fails, continue with full protocol below.
+<!-- /SYNC: preamble-check -->
 
-2. **Auto-detect (zero-config fallback):**
-   - Run `git remote get-url origin` to extract org and repo name
-   - Scan for project files: `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `Gemfile`
-   - Infer test/lint commands from detected ecosystem
-   - **CONFIRM with user:** "I detected [language] project [org/repo] with test command `[inferred]`. Is this correct?" DO NOT proceed without confirmation.
+**Run the following two reads in parallel** (both are unconditional and independent):
 
-3. **Validate resolved context:**
-   - `project.org` and `project.name` must be non-empty (stop if missing)
-   - `git_provider` must be `github` (stop with message if not)
-   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
+1. **Resolve Project Context (MANDATORY):** Read the `coding-workflows:project-context` skill and follow its protocol for resolving project context (reads workflow.yaml, auto-detects project settings, validates configuration). **If the skill file does not exist, STOP:** "Required skill `coding-workflows:project-context` not found. Ensure the coding-workflows plugin is installed."
+
+2. **Read the Skill (MANDATORY):** Use the Read tool to read the `coding-workflows:issue-workflow` skill bundled with this plugin. If the skill file doesn't exist, proceed without it and note the missing skill.
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
----
-
-## Step 1: Read the Skill (MANDATORY)
-
-Use the Read tool to read the `coding-workflows:issue-workflow` skill bundled with this plugin. If the skill file doesn't exist, proceed without it and note the missing skill.
-
-Do not proceed until you have read it (or confirmed it's missing).
+Do not proceed until both reads are complete (or confirmed missing).
 
 ---
 
@@ -114,12 +110,16 @@ If BOTH conditions are true, use multi-round dispatch:
   - If TeamCreate fails: log warning, fall back to Task-based dispatch
 - **No**: Use Task-based multi-round dispatch (sequential Task calls with context bridging)
 
+> For token cost and trade-off comparison between dispatch modes, see the **Dispatch Mode Comparison** section in `coding-workflows:deliberation-protocol`.
+
 If EITHER condition is false:
 - Use single-round Task dispatch
 
-**When using multi-round dispatch**: Read the `coding-workflows:deliberation-protocol` skill and follow its protocol. When `plan-issue` auto-chains to `review-plan` in Step 8, the review phase evaluates its own guard clause independently.
+**When using multi-round dispatch**: Read `coding-workflows:deliberation-protocol` and follow its phases (Setup through Shutdown) in place of Steps 4c-4d. Resume at Step 5 after the protocol completes. If the skill file does not exist, fall back to single-round Task dispatch.
 
 ### 4c. Invoke Specialists
+
+**Note:** If multi-round dispatch was activated in Step 4b, the deliberation protocol replaces Steps 4c-4d. Do not execute them -- resume at Step 5.
 
 For each selected specialist, use the Task tool with `subagent_type` set to the agent name from frontmatter. Your prompt should focus on the plan review:
 
@@ -213,6 +213,31 @@ gh issue comment [NUMBER] --repo "{org}/{repo}" --body "PLAN"
 
 After posting the plan:
 
+### Preamble Emission (optimization cache)
+
+Write resolved project context to `/tmp/.coding-workflows-preamble-{issue}.yaml` (where `{issue}` is `{{issue}}` with `#` replaced by `-`) so that `review-plan` can skip redundant context resolution after `/clear`. **If the write fails** (permissions, disk full, etc.), **log a warning and continue** — `review-plan` falls back to full protocol.
+
+```bash
+cat > /tmp/.coding-workflows-preamble-{issue}.yaml <<'EOF'
+# --- project-context-preamble v1 ---
+version: 1
+created_at: "{ISO-8601 timestamp}"
+issue: "{raw {{issue}} value}"
+issue_repo: "{resolved repo name}"
+project:
+  org: "{resolved org}"
+  name: "{resolved repo name}"
+  remote: "{resolved remote, default: origin}"
+  language: "{resolved language}"
+  git_provider: "github"
+branch_pattern: "{resolved branch pattern}"
+config_source: "{workflow.yaml or auto-detect}"
+# --- end preamble ---
+EOF
+```
+
+### Transition
+
 ```
 Implementation plan complete for {{issue}}
 
@@ -229,6 +254,8 @@ Clearing context before adversarial review...
 ## Step 8: Invoke Adversarial Review
 
 After clearing context, execute the full `/coding-workflows:review-plan` workflow for `{{issue}}`:
+
+> **Note:** The review phase evaluates its own multi-round dispatch guard clause independently. Multi-round dispatch in `plan-issue` does not imply multi-round dispatch in `review-plan`.
 
 This will:
 1. Fetch the issue and find the plan we just posted

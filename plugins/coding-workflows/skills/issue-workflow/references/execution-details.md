@@ -4,6 +4,7 @@ Procedural elaboration for Phase 2 execution steps, output format templates, and
 
 > **Context:** See the core issue-workflow skill for workflow rules, verification gates, and decision criteria.
 > This file provides step details, output templates, and examples for the execution phase.
+> For quick-reference checklists, see `checklists.md` in this directory.
 
 ---
 
@@ -95,7 +96,7 @@ After CI passes, poll for review comments on the PR:
 gh pr view [PR_NUMBER] --repo "{org}/{repo}" --comments --json comments
 ```
 
-Look for comments containing review verdicts ("Ready to merge", MUST FIX, FIX NOW, or CREATE ISSUE). Ignore CI bot status comments -- these are CI signals, not review verdicts (see Two Distinct Signals in core Step 6).
+Look for comments containing review verdicts ("Ready to merge", MUST FIX, FIX NOW, or CREATE ISSUE). Ignore CI bot status comments -- these are CI signals, not review verdicts (see Two Distinct Signals section below).
 
 **Silence is not approval.** If no review comment has been posted yet, the review is still pending. Do not interpret the absence of review comments as implicit approval. Wait and re-poll.
 
@@ -119,3 +120,22 @@ Look for comments containing review verdicts ("Ready to merge", MUST FIX, FIX NO
 ## Step 6d: Iteration Limit
 
 After **3 full iterations**, if blocking items still exist, stop and escalate to human.
+
+---
+
+## Two Distinct Signals
+
+| Signal | Source | Mechanism | What It Proves |
+|--------|--------|-----------|----------------|
+| CI status | Machine | `gh pr checks` exit code | Code compiles, tests pass, linter passes |
+| Review verdict | Human or review agent | Structured PR comment content | Code is correct, complete, meets quality bar |
+
+CI passing is NECESSARY but NOT SUFFICIENT. **CI pass means proceed to review. It does NOT mean the PR is approved.**
+
+### Beware Qualified Approvals
+
+- "Ready to merge once items are addressed" is NOT approval
+- "LGTM with minor changes" is NOT approval
+- "Approved pending X" is NOT approval
+
+The ONLY valid exit is "Ready to merge" with ZERO blocking items. Review verdicts follow the severity tiers defined in `coding-workflows:pr-review`.

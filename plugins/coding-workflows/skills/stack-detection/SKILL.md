@@ -109,6 +109,8 @@ When performing LLM-driven codebase analysis (see `coding-workflows:codebase-ana
 
 For TDD patterns and testing strategy guidance per stack, see `coding-workflows:tdd-patterns`.
 
+See `references/framework-hints.md` for framework-specific convention hints used during skill generation.
+
 ---
 
 ## Polyglot Projects

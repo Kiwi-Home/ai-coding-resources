@@ -90,19 +90,20 @@ Skills do not have a `tools` field and are not evaluated for tools staleness (ag
 ### Skills-Comparison Staleness Detection
 
 When a self-match is detected for a generated agent, compare the agent's `skills` frontmatter array against the expected skills set. The expected set is the union of:
-1. **Universal skills** (always required, defined by the generator command)
+1. **Universal skills** (required for execution-capable agents only -- those with `Write` or `Edit` tools)
 2. **Domain-matched skills** (skills whose `domains` overlap with the agent's `domains`)
 
 ```
 Skills staleness signals (agents only, not skills):
-- Universal skill missing from agent's `skills` list → stale (missing universal)
+- Universal skill missing from execution-capable agent's `skills` list → stale (missing universal)
+- Universal skill absent from review-only agent's `skills` list → NOT stale (expected)
 - Domain-matched skill absent from agent's `skills` list → stale (skills drift)
 - Skill in agent's `skills` list no longer resolving to any layer → stale (dangling reference)
 - Skill in agent's `skills` list present but not in expected set → informational (user addition)
 - All expected skills present, no dangling refs → current
 ```
 
-**Universal vs domain distinction:** The staleness summary must distinguish between these two categories. Missing universal skills indicate the agent predates a workflow upgrade. Missing domain skills indicate the project's skill inventory has grown since the agent was generated.
+**Universal vs domain distinction:** The staleness summary must distinguish between these two categories. Missing universal skills on execution-capable agents indicate the agent predates a workflow upgrade. Missing domain skills indicate the project's skill inventory has grown since the agent was generated. Review-only agents are not evaluated for universal skill staleness.
 
 **Resolution order:** Check universal skills first, then domain-matched skills. This ensures universal skill gaps are surfaced prominently.
 

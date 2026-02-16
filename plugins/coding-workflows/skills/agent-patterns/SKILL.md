@@ -62,7 +62,7 @@ Agent files use YAML frontmatter. Fields are separated into two tiers: required 
 | `color` | string | *(none)* | Display color in the `/agents` UI. See Claude Code docs for valid values. |
 
 **WARNING -- `skills` injects full content:**
-The `skills:` field causes each listed skill's entire SKILL.md content to be loaded into the agent's context window at startup. This is NOT informational metadata. Agents do NOT inherit skills from their parent context. The recommended aggregate budget is ~5,000 tokens per agent across all listed skills. The `/coding-workflows:generate-assets` command includes universal skills (e.g., `plugin:coding-workflows:knowledge-freshness`) that consume a fixed baseline; remaining budget is for domain-specific skills.
+The `skills:` field causes each listed skill's entire SKILL.md content to be loaded into the agent's context window at startup. This is NOT informational metadata. Agents do NOT inherit skills from their parent context. The recommended aggregate budget is ~5,000 tokens per agent across all listed skills. The `/coding-workflows:generate-assets` command includes universal skills (e.g., `plugin:coding-workflows:knowledge-freshness`) for execution-capable agents -- those with `Write` or `Edit` tools. Review-only agents (no `Write`/`Edit` tools) omit universal skills, leaving the full ~5,000 token budget for domain-specific skills. Execution-capable agents use ~1,273 tokens for universal skills, leaving ~3,727 for domain-specific skills.
 
 **`skills` naming convention:**
 - Project skills: bare name (`billing-patterns`)
@@ -174,7 +174,7 @@ These fields apply to both agent files (`.claude/agents/*.md`) and skill files (
 name: billing-reviewer
 description: "Reviews billing domain patterns..."
 domains: [billing, payments, subscriptions]
-skills: [plugin:coding-workflows:knowledge-freshness, billing-patterns, plugin:coding-workflows:issue-workflow]
+skills: [billing-patterns, plugin:coding-workflows:issue-workflow]
 role: reviewer
 generated_by: generate-assets
 generated_at: "2026-02-08"

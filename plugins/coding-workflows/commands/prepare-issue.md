@@ -27,34 +27,31 @@ Complete preparation pipeline that takes an issue from requirements to execution
 
 **Pipeline:**
 ```
-[Complexity Triage]  ->  Design Session (solo | lightweight | full)  ->  /clear  ->  /coding-workflows:plan-issue {{issue}} (includes review)
+[Complexity Triage]  ->  Design Session (solo | lightweight | full)
+                              |
+                        [if solo + guard rails pass]
+                              |-> Solo Plan Derivation -> DONE
+                              |
+                        [otherwise]
+                              |-> /clear -> /coding-workflows:plan-issue {{issue}} (includes review)
 ```
 
 By the end, the issue will have:
 1. Design session with architectural decisions (depth matches complexity)
-2. Implementation plan with specialist input
-3. Adversarial review of the plan
-4. Revised plan addressing review feedback
+2. Implementation plan (specialist-reviewed, or derived from design session for solo shortcut)
+3. Adversarial review of the plan (or plan confirmation for solo shortcut)
+4. Revised plan addressing review feedback (if applicable)
 
 ---
 
 ## Step 0: Resolve Project Context (MANDATORY)
 
-1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
-   - If file does not exist: proceed to step 2.
+Read the `coding-workflows:project-context` skill and follow its protocol for resolving project context (reads workflow.yaml, auto-detects project settings, validates configuration). **If the skill file does not exist, STOP:** "Required skill `coding-workflows:project-context` not found. Ensure the coding-workflows plugin is installed."
 
-2. **Auto-detect (zero-config fallback):**
-   - Run `git remote get-url origin` to extract org and repo name
-   - Scan for project files to detect ecosystem
-   - **CONFIRM with user:** "I detected [language] project [org/repo]. Is this correct?" DO NOT proceed without confirmation.
+**Command-specific overrides:**
+- Use **Lightweight** auto-detect mode (no test/lint inference)
 
-3. **Validate resolved context:**
-   - `project.org` and `project.name` must be non-empty (stop if missing)
-   - `git_provider` must be `github` (stop with message if not)
-   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
-
-**DO NOT GUESS configuration values.**
+**DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
 ---
 
@@ -70,10 +67,11 @@ gh issue view [NUMBER] --repo "{org}/{repo}" --json title,body,labels,state
 
 **Stop if:**
 - Issue is closed
+- Issue already has a `## Plan Confirmed` comment (already prepared -- stop entirely)
 - Issue already has `## Implementation Plan (Revised)` (already prepared)
 - Issue lacks clear requirements (recommend writing requirements first)
 
-**Also stop if:**
+**Also skip Phase 1 if:**
 - Issue already has a `## Design Session` comment (design phase already complete -- skip to Phase 2)
 
 ### Complexity Assessment
@@ -82,6 +80,7 @@ gh issue view [NUMBER] --repo "{org}/{repo}" --json title,body,labels,state
 2. **If `mode` arg is `solo`, `lightweight`, or `full`**: use it directly, skip auto-assessment. Report:
    ```
    Mode override: [MODE] (user-specified)
+   Mode source: user-override
    ```
 3. **If `mode` is `auto` or omitted**: evaluate issue against triage signals from the skill using ONLY the already-fetched issue data (no additional codebase scans). Check `planning.triage.default_mode` in workflow.yaml (if set and not `auto`, use as project default).
 4. **If mode arg has an invalid value**: warn "Invalid mode '[value]'. Valid: auto, solo, lightweight, full." Default to auto and continue assessment.
@@ -89,6 +88,7 @@ gh issue view [NUMBER] --repo "{org}/{repo}" --json title,body,labels,state
    ```
    Complexity assessment: [SOLO | LIGHTWEIGHT | FULL]
    Signals: [1-line summary of key signals]
+   Mode source: auto-triage
    -> Proceeding in [mode] mode
 
    To override: re-run with `/coding-workflows:prepare-issue [issue] full`
@@ -108,10 +108,91 @@ from the `coding-workflows:complexity-triage` skill:
 1. Analyze the issue requirements, constraints, and acceptance criteria
 2. Produce a `## Design Session` comment with all required sections:
    - Decision, Rationale, Specialist Input (lead self-assessment),
-     Conflicts Resolved (N/A), Action Items, Open Questions
+     Conflicts Resolved (N/A), Action Items, Files to Modify,
+     Testing Strategy, Open Questions
 3. Post to issue via `gh issue comment`
 
-**Completion signal:** `## Design Session` comment posted to issue.
+#### Solo Shortcut Evaluation
+
+After posting the design session, evaluate whether the solo shortcut applies.
+
+**Eligibility:** The shortcut is ONLY available when `Mode source:` is `auto-triage`.
+It does NOT activate when:
+- The user overrode mode to `solo` (the user chose a lighter design session,
+  not necessarily lighter planning)
+- Lightweight mode degraded to solo due to missing agents
+
+**Guard rails (all must pass):**
+1. `Mode source:` label from triage report output (Complexity Assessment or lightweight degradation message) is `auto-triage` (not `user-override`, not `degraded`)
+2. Open Questions section contains only "None." (no unresolved questions)
+3. Action Items (Separate Issue Required) contains only "None identified."
+4. Specialist Input confidence is not "Low"
+5. Files to Modify and Testing Strategy sections are non-empty
+   (not blank, not "TBD", not "TODO", not "N/A", not template placeholder text
+   like `[change description]` or `[Testing approach...]`)
+
+**If ALL pass:** Proceed to Solo Plan Derivation below.
+**If ANY fail:** Continue to Phase 1-2 Transition (standard path).
+When guard rails fail, the standard prepare-issue flow continues from the
+next section as if the shortcut did not exist.
+
+Note: Guard rails 2-5 are checked against the lead's own output
+(self-certification). This is an accepted trade-off for solo-tier issues:
+the triage iron rule ("when uncertain, choose higher process") and signal
+precedence rule ("any Full-tier signal overrides Solo") prevent solo
+classification of non-trivial issues. For issues where the design session
+reveals unexpected complexity, the lead should write open questions or
+low-confidence assessments, which will naturally fail the guard rails.
+
+#### Solo Plan Derivation
+
+After the Design Session comment, generate a second comment containing both
+the derived `## Implementation Plan` and the `## Plan Confirmed` marker.
+Post as ONE `gh issue comment` call to eliminate partial-failure risk.
+
+**Derived plan template:**
+
+~~~markdown
+## Implementation Plan
+
+*Derived from solo design session (shortcut). See Design Session comment
+for full rationale.*
+
+### Approach
+[Copied from Decision section of design session]
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+[Copied from Files to Modify section of design session, using table format
+without Layer column — ensures execute-issue defaults to sequential execution]
+
+### Testing Strategy
+[Copied from Testing Strategy section of design session]
+
+### Action Items
+[Copied from Action Items (Inline) section of design session]
+
+---
+*Solo plan derivation via `/coding-workflows:prepare-issue` — specialist
+planning and adversarial review skipped per complexity triage.*
+
+---
+
+## Plan Confirmed
+
+Plan confirmed (solo shortcut). Derived from solo design session — no specialist
+planning or adversarial review required for this complexity level.
+
+Ready for: `/coding-workflows:execute-issue {{issue}}`
+~~~
+
+Post via `gh issue comment`. Skip Phase 1-2 Transition and Phase 2.
+Proceed directly to Solo Final Report.
+
+**Completion signal:** `## Implementation Plan` + `## Plan Confirmed`
+posted to issue in a single comment.
 
 ### If Lightweight Mode
 
@@ -123,6 +204,7 @@ from the `coding-workflows:complexity-triage` skill:
 3. **If no agents available:** degrade to solo mode with warning:
    ```
    No specialist agents found in .claude/agents/. Degrading from lightweight to solo mode.
+   Mode source: degraded
    To enable lightweight mode, run /coding-workflows:generate-assets agents
    ```
 4. Dispatch via Task with focused question and confidence assessment format
@@ -142,6 +224,31 @@ Execute `/coding-workflows:design-session {{issue}}` (unchanged from current beh
 ---
 
 ## Phase 1-2 Transition
+
+### Preamble Emission (optimization cache)
+
+Write resolved project context to `/tmp/.coding-workflows-preamble-{issue}.yaml` (where `{issue}` is `{{issue}}` with `#` replaced by `-`) so that `plan-issue` can skip redundant context resolution after `/clear`. **If the write fails** (permissions, disk full, etc.), **log a warning and continue** — `plan-issue` falls back to full protocol.
+
+```bash
+cat > /tmp/.coding-workflows-preamble-{issue}.yaml <<'EOF'
+# --- project-context-preamble v1 ---
+version: 1
+created_at: "{ISO-8601 timestamp}"
+issue: "{raw {{issue}} value}"
+issue_repo: "{resolved repo name}"
+project:
+  org: "{resolved org}"
+  name: "{resolved repo name}"
+  remote: "{resolved remote, default: origin}"
+  language: "{resolved language}"
+  git_provider: "github"
+branch_pattern: "{resolved branch pattern}"
+config_source: "{workflow.yaml or auto-detect}"
+# --- end preamble ---
+EOF
+```
+
+### Transition
 
 ```
 Design session complete for {{issue}}
@@ -190,6 +297,18 @@ Execute the full `/coding-workflows:plan-issue` workflow for `{{issue}}`.
 
 ## Final Report
 
+### Preamble Cleanup
+
+Remove the optimization cache file (if it exists). This is a no-op if the file was never written or was already cleaned up by `review-plan`.
+
+```bash
+rm -f /tmp/.coding-workflows-preamble-{issue}.yaml
+```
+
+Where `{issue}` is `{{issue}}` with `#` replaced by `-`.
+
+### Report
+
 ```
 Issue {{issue}} prepared for execution
 
@@ -212,6 +331,31 @@ Issue {{issue}} prepared for execution
 - CI + review loop (up to 3 iterations)
 ```
 
+### Solo Final Report
+
+If solo shortcut was used, report instead of the standard Final Report:
+
+```
+Issue {{issue}} prepared for execution (solo shortcut)
+
+**Pipeline completed:**
+- [x] Design session (solo assessment)
+- [x] Implementation plan (derived from design session)
+- [x] Plan confirmed (no adversarial review needed)
+- [ ] ~~Specialist planning~~ (skipped — solo shortcut)
+- [ ] ~~Adversarial review~~ (skipped — solo shortcut)
+
+**Issue now has:**
+- Solo design session with architectural decisions
+- Derived implementation plan (files, testing strategy, action items)
+- Plan confirmation marker
+
+**Ready for:** `/coding-workflows:execute-issue {{issue}}`
+
+**Note:** Solo shortcut used. If execution reveals unexpected complexity,
+re-prepare with: `/coding-workflows:prepare-issue {{issue}} full`
+```
+
 ---
 
 ## Error Handling
@@ -227,11 +371,19 @@ Issue {{issue}} prepared for execution
 | Plan fails to post | Stop, report error, don't proceed to review |
 | Review fails to post | Report partial completion, note what's missing |
 | Issue closed mid-pipeline | Stop, report that issue was closed |
+| Solo shortcut guard rail fails | Continue to Phase 1-2 Transition (standard path). Note: "Solo shortcut bypassed — proceeding to full planning." |
+| Solo plan derivation fails to post | Stop, report error. Design session is already posted; issue is in "Phase 1 complete, Phase 2 pending" state. User can resume with `/coding-workflows:plan-issue {{issue}}` |
+| Solo mode via user override (not auto-triage) | Shortcut does not activate. Continue to Phase 1-2 Transition. |
+| Lightweight degraded to solo | Shortcut does not activate (`Mode source: degraded`). Continue to Phase 1-2 Transition. |
 
 **Recovery:** If pipeline fails partway, check what's already posted to the issue and resume from there:
 - Has design session but no plan? -> `/coding-workflows:plan-issue {{issue}}`
 - Has plan but no review? -> `/coding-workflows:review-plan {{issue}}`
 - Solo/lightweight proved insufficient? -> Delete the `## Design Session` comment on the issue and re-run with explicit mode: `/coding-workflows:prepare-issue {{issue}} full`
+- Has solo-derived plan + Plan Confirmed but execution revealed unexpected
+  complexity? -> Delete both comments (Design Session, and the combined
+  Implementation Plan + Plan Confirmed comment) and re-run:
+  `/coding-workflows:prepare-issue {{issue}} full`
 
 ---
 

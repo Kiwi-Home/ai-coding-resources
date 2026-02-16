@@ -75,12 +75,21 @@ N/A — solo assessment.
 ### Action Items (Separate Issue Required)
 None identified.
 
+### Files to Modify
+- `path/to/file` - [actual change description — required for solo shortcut]
+
+### Testing Strategy
+[Concrete testing approach — required for solo shortcut. Use "N/A — no testable
+code changes" ONLY for doc-only issues. Placeholder text fails guard rail #5.]
+
 ### Open Questions
 [Any items needing human input, or "None."]
 
 ---
 *Solo design assessment via `/coding-workflows:prepare-issue` (complexity: low)*
 ```
+
+> *Note: The Files to Modify and Testing Strategy sections serve dual purpose: they document design intent (design session role) and provide structured input for the solo plan derivation in `prepare-issue` (plan bridge role). This intentional overlap eliminates a separate planning step for trivially-scoped issues.*
 
 ### Lightweight Mode
 

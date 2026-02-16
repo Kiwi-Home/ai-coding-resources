@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.1.2 — 2026-02-16
+
+### New skills
+
+- **project-context** — Shared context-resolution pattern for workflow commands. Encodes the canonical 3-step protocol (read config, auto-detect, validate) with extension points for command-specific behavior.
+- **refactoring-patterns** — Safe refactoring patterns for AI-assisted development. Covers refactoring triggers, AI-specific anti-patterns, size-check heuristics, and verification criteria.
+- **security-patterns** — Security detection patterns, anti-patterns, and OWASP mapping for code review. Covers input validation, authentication/authorization, secret management, and dependency audit.
+
+### Command improvements
+
+Solo-mode pipeline shortcut for trivial issues, cross-phase context pass-through for reduced redundant reads, and flow tension fixes across dispatch commands.
+
+- Affected areas: prepare-issue, plan-issue, design-session, execute-issue, execute-issue-worktree, review-plan, review-pr, create-issue, generate-assets, merge-issue, cleanup-worktree, help
+
+### Skill reference material
+
+New bundled references for deeper knowledge:
+
+- agent-patterns: agent-generation-spec, role-defaults
+- asset-discovery: staleness-ux
+- issue-workflow: checklists
+- skill-creator: creation-process, frontmatter-reference, generation-template, progressive-disclosure
+- stack-detection: framework-hints
+
+### Documentation alignment
+
+- Deliberation protocol: concrete dispatch decision guidance
+- Agent-team protocol: dispatch token benefits documentation
+- Help command: onboarding improvements with concepts, walkthrough, and adoption path
+- Complexity-triage, issue-workflow, issue-writer, pr-review: frontmatter and content refinements
+
 ## 1.1.1 — 2026-02-15
 
 ### New commands

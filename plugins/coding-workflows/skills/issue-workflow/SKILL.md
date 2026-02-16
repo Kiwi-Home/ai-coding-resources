@@ -118,7 +118,7 @@ Only proceed after plan is reviewed. **UNCONDITIONAL MANDATORY:** Before beginni
 
 ### Step 0: Resolve Project Context (MANDATORY)
 
-Read `.claude/workflow.yaml`. If present, use `project.remote` (default: `origin`) as the identity remote for org/repo resolution. If missing, auto-detect from `git remote get-url origin` + project files and **CONFIRM with user**. Validate: `project.org` and `project.name` non-empty, `commands.test.full` exists (warn if missing), `git_provider` is `github`. **DO NOT GUESS configuration values.**
+Read `.claude/workflow.yaml`. If present, use `project.remote` (default: `origin`) as the identity remote for org/repo resolution. If missing, auto-detect from `git remote get-url origin` + project files and **CONFIRM with user**. Validate: `project.org` and `project.name` non-empty, `commands.test.full` exists (warn if missing), `git_provider` is `github`. **DO NOT GUESS configuration values.** See `coding-workflows:project-context` for the full protocol.
 
 `project.remote` defines the identity remote (for `gh issue`/`gh pr` targets), not the git push target. See `setup.md` for the canonical explanation.
 
@@ -243,21 +243,7 @@ LOOP (max 3 iterations)
 
 **Stopping early is a workflow violation.**
 
-#### Two Distinct Signals
-
-| Signal | Source | Mechanism | What It Proves |
-|--------|--------|-----------|----------------|
-| CI status | Machine | `gh pr checks` exit code | Code compiles, tests pass, linter passes |
-| Review verdict | Human or review agent | Structured PR comment content | Code is correct, complete, meets quality bar |
-
-CI passing is NECESSARY but NOT SUFFICIENT. **CI pass means proceed to review. It does NOT mean the PR is approved.**
-
-**BEWARE QUALIFIED APPROVALS:**
-- "Ready to merge once items are addressed" is NOT approval
-- "LGTM with minor changes" is NOT approval
-- "Approved pending X" is NOT approval
-
-The ONLY valid exit is "Ready to merge" with ZERO blocking items. Review verdicts follow the severity tiers defined in `coding-workflows:pr-review`. See `references/execution-details.md` for Step 6a-6d procedural details.
+**CI passing is NECESSARY but NOT SUFFICIENT.** CI pass means proceed to review. It does NOT mean the PR is approved. Beware qualified approvals ("LGTM with minor changes" is NOT approval). See `references/execution-details.md` for the Two Distinct Signals framework, qualified approval examples, and Step 6a-6d procedural details.
 
 ### Step 7: Await Merge Decision
 
@@ -273,51 +259,13 @@ Three critical rules to always keep visible:
 - **CI/Review conflation**: CI pass means proceed to review, NOT approval. Never skip the review gate because CI passed.
 - **Silent deferrals**: Apply the Follow-Up Issue Threshold (Step 4.7) -- planned work must ship or be tracked. No exceptions.
 
-**UNCONDITIONAL MANDATORY:** Before beginning any work phase, MUST read `references/anti-patterns.md` for the complete anti-pattern reference with examples.
+**UNCONDITIONAL MANDATORY:** Before beginning Phase 2 (Execution), MUST read `references/anti-patterns.md` for the complete anti-pattern reference with examples.
 
 ---
 
-## Checklist
+## Checklists
 
-### Planning Checklist
-
-- [ ] Requirements extracted and verified
-- [ ] Build vs buy research completed
-- [ ] Existing solutions evaluated with clear recommendation
-- [ ] Codebase explored for related code and patterns
-- [ ] Implementation plan drafted
-- [ ] Plan posted to issue as comment (checked for duplicates first)
-- [ ] **STOPPED** to wait for review (unless autonomous mode)
-
-### Execution Checklist
-
-- [ ] Project context resolved (Step 0)
-- [ ] Issue and comments read
-- [ ] Implementation plan found
-- [ ] Feature branch created
-- [ ] Implementation follows plan (or plan updated if changed)
-- [ ] Tests written and passing
-- [ ] Linter passing
-- [ ] **Verification gate passed** (fresh evidence, not "should work")
-- [ ] **Spec compliance checked** (nothing missing, nothing extra)
-- [ ] **Deferred work tracked** (inline fixes completed, follow-up issues created for above-threshold deferrals)
-- [ ] PR created with issue reference
-- [ ] **ENTERED CI + REVIEW LOOP** (do NOT stop after push)
-- [ ] CI passing
-- [ ] **CI pass is not review approval** -- continued to review step (not stopped here)
-- [ ] Lint failures fixed
-- [ ] Review received
-- [ ] All blocking items addressed
-- [ ] **Verified unqualified approval** (no conditions attached)
-- [ ] Loop repeated until clean approval OR 3 iterations
-- [ ] **STOPPED** to await merge decision
-- [ ] Merged only when explicitly instructed
-
-### Agent Team Additions
-
-- [ ] Non-overlapping file assignments per agent
-- [ ] All agent tasks completed and integration tests pass
-- [ ] All agents shut down and team cleaned up
+See `references/checklists.md` for planning, execution, and agent team checklists.
 
 ---
 
@@ -326,13 +274,4 @@ Three critical rules to always keep visible:
 - `coding-workflows:knowledge-freshness` -- staleness triage framework for evaluating when to verify training data before using it
 - `coding-workflows:pr-review` -- severity framework for classifying findings during plan and code review
 - `coding-workflows:systematic-debugging` -- hypothesis-driven debugging methodology for stuck failure loops
-
----
-
-## Integration with Commands
-
-- `/coding-workflows:plan-issue [issue]` - Runs Planning phase, stops after Step 5
-- `/coding-workflows:execute-issue [issue]` - Runs Execution phase (assumes plan exists)
-- `/coding-workflows:review-plan [issue]` - Reviews plan, posts revised plan
-
-See `references/version-discovery.md` for research tools and version lookup methods.
+- `references/version-discovery.md` -- research tools and version lookup methods

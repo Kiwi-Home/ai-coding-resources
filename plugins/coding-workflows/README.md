@@ -77,7 +77,7 @@ Run `/coding-workflows:setup` for unified project initialisation:
 
 | Command | What It Does |
 |---------|--------------|
-| `/coding-workflows:create-issue <platform> <desc>` | Create a well-structured issue in your tracker (GitHub, Linear, Jira, Asana) |
+| `/coding-workflows:create-issue <platform> <desc>` | Create a well-structured issue on GitHub (best-effort: Linear, Jira, Asana) |
 | `/coding-workflows:prepare-issue <issue> [mode]` | Full preparation pipeline with complexity triage |
 | `/coding-workflows:execute-issue <issue>` | Implement a planned+reviewed issue using TDD; creates feature branch, opens PR, and manages review loop (up to 3 iterations) |
 | `/coding-workflows:execute-issue-worktree <issue>` | Execute a planned+reviewed issue in an isolated git worktree |
@@ -103,9 +103,9 @@ Use these individually when you don't need the full pipeline:
 | `/coding-workflows:merge-issue <issue>` | Merge a PR and clean up branch + worktree for a completed issue |
 | `/coding-workflows:cleanup-worktree <issue>` | Remove worktree and branch for a completed issue; idempotent with unmerged-changes safety check |
 | `/coding-workflows:check-updates [sources]` | Check upstream dependencies for new releases and changelog updates; produces a local markdown digest with change tiers |
-| `/coding-workflows:help` | Quick reference for all coding workflow commands |
+| `/coding-workflows:help` | Reference guide for coding workflow commands, concepts, and adoption |
 
-> **Auto-posting:** `plan-issue`, `review-plan`, `review-pr`, `design-session`, `create-issue`, and `prepare-issue` post comments or issues to GitHub automatically. Review the output after it's posted.
+> **Auto-posting:** `plan-issue`, `review-plan`, `review-pr`, `design-session`, and `prepare-issue` post comments to GitHub automatically. `create-issue` posts to the user's chosen platform. Review the output after it's posted.
 
 > **Plan gate:** `execute-issue` verifies a reviewed plan exists before starting. If none is found, it directs you to run `plan-issue` first.
 
@@ -122,6 +122,7 @@ Skills auto-activate based on context. Manual invocation: `/coding-workflows:<sk
 | `complexity-triage` | Complexity assessment framework for routing issues to appropriate preparation depth |
 | `deliberation-protocol` | Governs multi-round specialist deliberation for design sessions, plan reviews, and adversarial dispatch |
 | `agent-team-protocol` | Governs parallel code execution teams with file ownership, TDD workflow, git coordination, and team lifecycle management |
+| `project-context` | Shared context-resolution pattern for workflow commands |
 
 ### Knowledge Skills
 
@@ -130,6 +131,8 @@ Skills auto-activate based on context. Manual invocation: `/coding-workflows:<sk
 | `tdd-patterns` | Stack-aware TDD patterns, anti-patterns, and quality heuristics |
 | `systematic-debugging` | Structured debugging methodology for hypothesis-driven failure resolution |
 | `pr-review` | Framework for reviewing pull requests with severity-tiered findings, ecosystem-adapted focus areas, and strict exit criteria |
+| `security-patterns` | Security detection patterns, anti-patterns, and OWASP mapping for code review |
+| `refactoring-patterns` | Safe refactoring patterns for AI-assisted development |
 | `knowledge-freshness` | Staleness triage framework for evaluating when training data is reliable vs. when verification is required |
 
 ### Asset Management Skills

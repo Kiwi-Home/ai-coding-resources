@@ -1,6 +1,6 @@
 {
   "name": "coding-workflows",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Engineering workflow commands for planning, reviewing, and executing GitHub issues with dynamically discovered specialist agents.",
   "author": {
     "name": "Kiwi Home"

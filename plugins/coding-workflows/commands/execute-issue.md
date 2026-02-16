@@ -22,21 +22,10 @@ allowed-tools:
 
 ## Step 0: Resolve Project Context (MANDATORY)
 
-1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
-   - If file does not exist: proceed to step 2.
+Read the `coding-workflows:project-context` skill and follow its protocol for resolving project context (reads workflow.yaml, auto-detects project settings, validates configuration). **If the skill file does not exist, STOP:** "Required skill `coding-workflows:project-context` not found. Ensure the coding-workflows plugin is installed."
 
-2. **Auto-detect (zero-config fallback):**
-   - Run `git remote get-url origin` to extract org and repo name
-   - Scan for project files: `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `Gemfile`
-   - Infer test/lint commands from detected ecosystem
-   - **CONFIRM with user:** "I detected [language] project [org/repo] with test command `[inferred]`. Is this correct?" DO NOT proceed without confirmation.
-
-3. **Validate resolved context:**
-   - `project.org` and `project.name` must be non-empty (stop if missing)
-   - `commands.test.full` should exist (warn if missing, skip test steps)
-   - `git_provider` must be `github` (stop with message if not)
-   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
+**Command-specific overrides:**
+- Additionally validate that `commands.test.full` exists (warn if missing, skip test steps)
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 

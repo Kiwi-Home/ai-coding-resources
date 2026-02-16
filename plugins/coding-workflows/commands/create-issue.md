@@ -1,5 +1,5 @@
 ---
-description: Create a well-structured issue in your tracker (GitHub, Linear, Jira, Asana)
+description: Create a well-structured issue on GitHub (best-effort: Linear, Jira, Asana)
 allowed-tools:
   - Read
   - Grep
@@ -18,20 +18,10 @@ args:
 
 ## Step 0: Resolve Project Context (MANDATORY)
 
-1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
-   - If file does not exist: proceed to step 2.
+Read the `coding-workflows:project-context` skill and follow its protocol for resolving project context (reads workflow.yaml, auto-detects project settings, validates configuration). **If the skill file does not exist, STOP:** "Required skill `coding-workflows:project-context` not found. Ensure the coding-workflows plugin is installed."
 
-2. **Auto-detect (zero-config fallback):**
-   - Run `git remote get-url origin` to extract org and repo name
-   - Scan for project files: `pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `Gemfile`
-   - Infer test/lint commands from detected ecosystem
-   - **CONFIRM with user:** "I detected [language] project [org/repo] with test command `[inferred]`. Is this correct?" DO NOT proceed without confirmation.
-
-3. **Validate resolved context:**
-   - `project.org` and `project.name` must be non-empty (stop if missing)
-   - If `{{platform}}` is `github`: `git_provider` must be `github` (stop with message if not). For other platforms: skip `git_provider` check — unlike sibling commands that always post to GitHub issues, this command targets the user's chosen tracker.
-   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
+**Command-specific overrides:**
+- **Conditional git_provider:** Check `git_provider` only when `{{platform}}` is `github` (stop with message if not `github`). For other platforms: skip `git_provider` check -- unlike sibling commands that always post to GitHub issues, this command targets the user's chosen tracker.
 
 **DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
@@ -61,16 +51,18 @@ Show the formatted issue to the user, including:
 
 ## Step 4: Create Issue on Platform
 
-First, validate that `{{platform}}` is one of: `github`, `linear`, `jira`, `asana`. If not recognized, stop with a message listing supported platforms.
+First, validate that `{{platform}}` is one of: `github`, `linear`, `jira`, `asana`. If not recognized, stop with a message listing supported platforms and their support levels (see table above).
 
 Then create the issue using the appropriate method:
 
-| Platform | Method | Command/Tool |
-|----------|--------|--------------|
-| github | CLI | `gh issue create --repo "{org}/{repo}"` |
-| linear | CLI | `linear issue create` |
-| jira | MCP | Use Jira MCP tool if available |
-| asana | MCP | Use Asana MCP tool if available |
+| Platform | Support | Method | Command/Tool |
+|----------|---------|--------|--------------|
+| github | Supported | CLI | `gh issue create --repo "{org}/{repo}"` |
+| linear | Best-effort | CLI | `linear issue create` |
+| jira | Best-effort | MCP | Use Jira MCP tool if available |
+| asana | Best-effort | MCP | Use Asana MCP tool if available |
+
+> Best-effort platforms depend on external tooling (CLI or MCP server) that the plugin does not install, configure, or test. Linear has a dedicated CLI (`linear`) with similar mechanics to `gh`; Jira and Asana require an MCP server to be configured. GitHub is the only platform with full config validation and tested error diagnostics.
 
 ## Step 5: Return URL
 
@@ -91,5 +83,5 @@ Return the issue URL when complete.
 | CLI failure (gh/linear) | Stop. Present: (1) the error message, (2) the target that was attempted and where it was resolved from (`workflow.yaml` or auto-detect), (3) the failed CLI command for retry, (4) the formatted issue body for manual creation. Best-effort diagnostic hint: repository not found → check `project.org`/`project.name` in `workflow.yaml`; authentication/permission error → check `gh auth status` and repo access; transient error (timeout, rate limit) → suggest retrying the same command. **Do NOT retry with a different target or without the `--repo` flag.** |
 | MCP tool not available (Jira/Asana) | Stop. Present the formatted issue body; suggest creating in the web UI. |
 | MCP tool call fails (Jira/Asana) | Stop. Present: (1) the MCP error message as-is, (2) the target that was attempted, (3) the formatted issue body for manual creation. Suggest checking MCP server configuration. **Do NOT attempt a different platform or target.** |
-| Platform not recognized | Stop with message listing supported platforms: github, linear, jira, asana |
+| Platform not recognized | Stop with message listing supported platforms and their support levels (see platform table) |
 | Partial success (created but URL not captured) | Report success, suggest checking the target's issue list for the newly created issue. Do NOT re-create. |

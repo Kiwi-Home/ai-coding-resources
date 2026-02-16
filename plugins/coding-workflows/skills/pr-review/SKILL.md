@@ -303,6 +303,7 @@ See `references/review-config-schema.md` for the full YAML schema. Read it when 
 
 ## Cross-References
 
+- `coding-workflows:security-patterns` -- security detection patterns, severity graduation, and OWASP mapping for security-focused review
 - `coding-workflows:stack-detection` -- ecosystem detection for project context resolution
 - `coding-workflows:issue-writer` -- issue creation patterns (used by CREATE ISSUE protocol)
 - `coding-workflows:issue-workflow` -- follow-up issue threshold (deferred work tracking); CI/Review Conflation anti-pattern (CI pass is prerequisite, not substitute for review approval)

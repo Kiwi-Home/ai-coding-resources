@@ -26,21 +26,23 @@ Adversarial critique of an existing plan. Goal: surface problems BEFORE implemen
 
 ## Step 0: Resolve Project Context (MANDATORY)
 
-1. **Read config:** Use the Read tool to read `.claude/workflow.yaml`.
-   - If file exists: extract all fields. Also read `project.remote` (default: `origin` if field is absent or empty). Use this as the identity remote name for any `git remote get-url` or `gh --repo` resolution. Proceed to step 3.
-   - If file does not exist: proceed to step 2.
+<!-- SYNC: preamble-check — keep identical in plan-issue.md, review-plan.md, design-session.md -->
+**Pipeline preamble (optimization cache):** Check if `/tmp/.coding-workflows-preamble-{issue}.yaml`
+exists (where `{issue}` is `{{issue}}` with `#` replaced by `-`). If found, read and validate:
+YAML must parse, `version` must equal `1`, `created_at` must be within 30 minutes, all required
+fields present (`version`, `created_at`, `issue`, `issue_repo`, `project.org`, `project.name`,
+`project.git_provider`, `config_source`), and `preamble.issue` matches `{{issue}}`. If valid,
+adopt resolved values and skip to structural validation: confirm `project.org`/`project.name`
+non-empty, `git_provider` is `github`, and `git remote get-url {project.remote}` succeeds.
+If file not found, parse error, stale, or any validation fails, continue with full protocol below.
+<!-- /SYNC: preamble-check -->
 
-2. **Auto-detect (zero-config fallback):**
-   - Run `git remote get-url origin` to extract org and repo name
-   - Scan for project files to detect ecosystem
-   - **CONFIRM with user:** "I detected [language] project [org/repo]. Is this correct?" DO NOT proceed without confirmation.
+Read the `coding-workflows:project-context` skill and follow its protocol for resolving project context (reads workflow.yaml, auto-detects project settings, validates configuration). **If the skill file does not exist, STOP:** "Required skill `coding-workflows:project-context` not found. Ensure the coding-workflows plugin is installed."
 
-3. **Validate resolved context:**
-   - `project.org` and `project.name` must be non-empty (stop if missing)
-   - `git_provider` must be `github` (stop with message if not)
-   - If `project.remote` is set to a non-empty value but `git remote get-url {remote}` fails: stop with error: "Configured remote '{remote}' not found. Run `git remote -v` to see available remotes, or update project.remote in .claude/workflow.yaml." Do NOT silently fall back to origin.
+**Command-specific overrides:**
+- Use **Lightweight** auto-detect mode (no test/lint inference)
 
-**DO NOT GUESS configuration values.**
+**DO NOT GUESS configuration values.** If a value cannot be read from workflow.yaml or confirmed via auto-detection, ask the user.
 
 ---
 
@@ -51,8 +53,11 @@ Parse `{{issue}}`:
 - With repo (e.g., `other-repo#10`) -> use as-is with the org from resolved config
 
 ```bash
-gh issue view [NUMBER] --repo "{org}/{repo}" --json title,body,comments
+gh issue view [NUMBER] --repo "{org}/{repo}" --json title,body,comments \
+  --jq '{title, body, comments: [.comments[]? | select((.body // "") | test("## (Implementation Plan|Design Session|Plan Review|Plan Confirmed)"))]}'
 ```
+
+> **Why `--jq`?** Later pipeline phases accumulate large comment histories. This filter keeps only comments containing pipeline-relevant headers, reducing payload size. The `(.body // "")` null-coalescing prevents crashes on bot-generated comments with null bodies. The `[]?` optional operator handles zero-comment issues gracefully.
 
 **Find the plan:** Look for `## Implementation Plan` in comments.
 
@@ -87,14 +92,22 @@ If BOTH conditions are true, use multi-round dispatch:
   - If TeamCreate fails: log warning, fall back to Task-based dispatch
 - **No**: Use Task-based multi-round dispatch (sequential Task calls with context bridging)
 
+> For token cost and trade-off comparison between dispatch modes, see the **Dispatch Mode Comparison** section in `coding-workflows:deliberation-protocol`.
+
 If EITHER condition is false:
 - Use single-round Task dispatch
 
-**When using multi-round dispatch**: Read the `coding-workflows:deliberation-protocol` skill and follow its protocol. Adversarial reviewers CAN challenge each other's findings through the chair's cross-pollination.
+**When using multi-round dispatch**: Read `coding-workflows:deliberation-protocol` and follow its phases (Setup through Shutdown) in place of Steps 3-4. Resume at Step 5 after the protocol completes. If the skill file does not exist, fall back to single-round Task dispatch.
 
 ---
 
 ## Step 3: Adversarial Dispatch
+
+**Note:** If multi-round dispatch was activated in Step 2b, the deliberation protocol replaces Steps 3-4. Do not execute them -- resume at Step 5.
+
+> Adversarial reviewers CAN challenge each other's findings through the chair's cross-pollination in Round 2+.
+
+If the plan involves security-relevant changes (authentication, authorization, input handling, dependency changes, secret management), include the `coding-workflows:security-patterns` skill as context for adversarial reviewers.
 
 Invoke each specialist using the Task tool with `subagent_type` set to the agent name from frontmatter. Frame the prompt as adversarial critique:
 
@@ -234,6 +247,18 @@ Ready for: `/coding-workflows:execute-issue {{issue}}`
 ---
 
 ## Step 8: Report and STOP
+
+### Preamble Cleanup
+
+Remove the optimization cache file (if it exists). Handles both standalone `plan-issue -> review-plan` runs and `prepare-issue` pipeline runs.
+
+```bash
+rm -f /tmp/.coding-workflows-preamble-{issue}.yaml
+```
+
+Where `{issue}` is `{{issue}}` with `#` replaced by `-`.
+
+### Report
 
 ```
 **Review complete for {{issue}}**
