@@ -75,6 +75,9 @@ fi
 EVIDENCE_LOG="${TMPDIR:-/tmp}/coding-workflows-evidence-${SESSION_ID}.jsonl"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
 
+# Determine git root for evidence scoping (parallel session / worktree safety)
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "unknown")
+
 # Count output lines from tool_response
 LINE_COUNT=$(parse_json_field "$INPUT" ".tool_response.stdout" | wc -l 2>/dev/null | tr -d ' ' || echo "0")
 
@@ -84,22 +87,24 @@ if [ "$EXIT_CODE" != "0" ] || [ "$IS_FAILURE" = "true" ]; then
   FAILURE_CONTEXT=$(parse_json_field "$INPUT" ".tool_response.stdout" | tail -3 2>/dev/null | tr -cd '[:print:][:space:]' | head -c 500 || true)
 fi
 
-# Append JSONL entry
+# Append JSONL entry (includes git_root for parallel session / worktree scoping)
 if command -v jq &>/dev/null; then
   if [ -n "$FAILURE_CONTEXT" ]; then
     jq -n --arg ts "$TIMESTAMP" --arg cmd "$COMMAND" --argjson ec "$EXIT_CODE" --argjson lines "$LINE_COUNT" \
-      --arg fc "$FAILURE_CONTEXT" \
-      '{ts: $ts, cmd: $cmd, exit_code: $ec, lines: $lines, failure_context: $fc}' >> "$EVIDENCE_LOG" 2>/dev/null
+      --arg fc "$FAILURE_CONTEXT" --arg gr "$GIT_ROOT" \
+      '{ts: $ts, cmd: $cmd, exit_code: $ec, lines: $lines, failure_context: $fc, git_root: $gr}' >> "$EVIDENCE_LOG" 2>/dev/null
   else
     jq -n --arg ts "$TIMESTAMP" --arg cmd "$COMMAND" --argjson ec "$EXIT_CODE" --argjson lines "$LINE_COUNT" \
-      '{ts: $ts, cmd: $cmd, exit_code: $ec, lines: $lines}' >> "$EVIDENCE_LOG" 2>/dev/null
+      --arg gr "$GIT_ROOT" \
+      '{ts: $ts, cmd: $cmd, exit_code: $ec, lines: $lines, git_root: $gr}' >> "$EVIDENCE_LOG" 2>/dev/null
   fi
 else
+  GIT_ROOT_SAFE=$(printf '%s' "$GIT_ROOT" | sed 's/\\/\\\\/g; s/"/\\"/g')
   if [ -n "$FAILURE_CONTEXT" ]; then
     FC_SAFE=$(printf '%s' "$FAILURE_CONTEXT" | tr '\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g' | head -c 500)
-    echo "{\"ts\":\"${TIMESTAMP}\",\"cmd\":\"$(echo "$COMMAND" | head -c 200)\",\"exit_code\":${EXIT_CODE},\"lines\":${LINE_COUNT},\"failure_context\":\"${FC_SAFE}\"}" >> "$EVIDENCE_LOG" 2>/dev/null
+    echo "{\"ts\":\"${TIMESTAMP}\",\"cmd\":\"$(echo "$COMMAND" | head -c 200)\",\"exit_code\":${EXIT_CODE},\"lines\":${LINE_COUNT},\"failure_context\":\"${FC_SAFE}\",\"git_root\":\"${GIT_ROOT_SAFE}\"}" >> "$EVIDENCE_LOG" 2>/dev/null
   else
-    echo "{\"ts\":\"${TIMESTAMP}\",\"cmd\":\"$(echo "$COMMAND" | head -c 200)\",\"exit_code\":${EXIT_CODE},\"lines\":${LINE_COUNT}}" >> "$EVIDENCE_LOG" 2>/dev/null
+    echo "{\"ts\":\"${TIMESTAMP}\",\"cmd\":\"$(echo "$COMMAND" | head -c 200)\",\"exit_code\":${EXIT_CODE},\"lines\":${LINE_COUNT},\"git_root\":\"${GIT_ROOT_SAFE}\"}" >> "$EVIDENCE_LOG" 2>/dev/null
   fi
 fi
 

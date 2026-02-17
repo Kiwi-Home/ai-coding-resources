@@ -67,9 +67,18 @@ hooks:
     # allowlist:                   # packages that skip the version check
     #   - setuptools
     #   - wheel
+  pre_push_verification:
+    # Max age for evidence before it's considered stale (default: 30)
+    # staleness_threshold_minutes: 30
+    # "block" (deny push, default) or "warn" (advisory only)
+    # mode: block
   execute_issue_completion_gate:
     # escalation_threshold: 3     # Blocked-stop attempts before degrading to advisory (default: 3)
     review_gate: false             # Set true if using automated PR review (default: false)
+  checkpoint_staleness:
+    # threshold: 15               # Bash tool calls since last checkpoint before advisory fires (default: 15)
+    # min_floor: 8                # Minimum total Bash calls before staleness detection activates (default: 8).
+                                   # Suppresses the hook for short/simple sessions that complete quickly.
 
 # --- Examples for other languages ---
 #

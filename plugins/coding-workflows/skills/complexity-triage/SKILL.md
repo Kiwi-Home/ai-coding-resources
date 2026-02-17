@@ -61,6 +61,13 @@ Evaluate against already-fetched issue data only. No codebase scans during triag
 ### Rationale
 [Why this approach, including trade-offs considered]
 
+### Architecture Diagram
+<!-- Optional: include when the subject involves component interactions,
+     data flows, or state transitions. Omit entirely for non-architectural topics. -->
+```mermaid
+[Diagram matching the subject]
+```
+
 ### Specialist Input
 | Specialist | Finding | Confidence |
 |------------|---------|------------|
@@ -96,6 +103,7 @@ code changes" ONLY for doc-only issues. Placeholder text fails guard rail #5.]
 Same structure as full design session output, with these degenerate values:
 - `### Specialist Input` table has exactly 1 row
 - `### Conflicts Resolved` → "N/A — single specialist, no conflicting perspectives."
+- `### Architecture Diagram` → optional, same rules as full template (include when subject involves component interactions, data flows, or state transitions)
 - Footer: `*Lightweight design session via /coding-workflows:prepare-issue (complexity: medium, 1 specialist)*`
 
 ---

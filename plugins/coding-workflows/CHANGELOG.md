@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.3 — 2026-02-16
+
+### New hooks
+
+Two hooks that close the verification loop around execute-issue sessions.
+
+- **pre-push-verification** — PreToolUse gate that intercepts `git push` and blocks unless fresh passing test/lint/typecheck evidence exists. Reads evidence from test-evidence-logger; never re-runs tests.
+- **checkpoint-staleness** — PostToolUse watchdog that tracks Bash tool call volume during execute-issue sessions and prompts for session checkpoints when extended work passes without one.
+
+Supporting changes: `_workflow-config.sh` (hoisted YAML extraction helpers, added staleness config readers), `templates/workflow.yaml` (new hook configuration sections).
+
+### Design session improvements
+
+Optional Mermaid architecture diagrams: design sessions now evaluate whether the subject warrants a diagram and include one when component interactions, data flows, or state transitions are involved.
+
+- Affected areas: design-session command, complexity-triage skill
+
+### Hook hardening
+
+- **test-evidence-logger** — Evidence entries now include `git_root` for parallel session and worktree scoping.
+- **execute-issue** — Added checkpoint-staleness and pre-push-verification annotations to guide agent behavior.
+
 ## 1.1.2 — 2026-02-16
 
 ### New skills

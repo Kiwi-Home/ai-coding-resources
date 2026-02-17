@@ -85,6 +85,35 @@ find_workflow_yaml() {
   echo ""
 }
 
+# --- YAML extraction helpers ---
+# Used by get_test_lint_commands and individual command getters.
+
+# Validate extracted command value.
+# Strips leading whitespace, then checks non-empty and not a comment.
+_is_valid_command() {
+  local val="$1"
+  val=$(printf '%s' "$val" | sed 's/^[[:space:]]*//')
+  [ -n "$val" ] && ! printf '%s' "$val" | grep -qE '^#'
+}
+
+# Extract value after a YAML key, strip quotes and whitespace.
+# Portable across macOS (BSD sed) and Linux (GNU sed).
+_extract_yaml_value() {
+  local line="$1"
+  # Remove everything up to and including the key + colon
+  local val
+  val=$(echo "$line" | sed 's/^[^:]*:[[:space:]]*//')
+  # Strip surrounding quotes (single or double)
+  val=$(echo "$val" | sed 's/^["'"'"']//' | sed 's/["'"'"']$//')
+  # Extract prefix before {path} placeholder
+  val=$(echo "$val" | sed 's/[[:space:]]*{path}.*//')
+  # Strip trailing dot (e.g., "ruff check ." → "ruff check")
+  val=$(echo "$val" | sed 's/[[:space:]]*\.$//')
+  # Strip trailing whitespace
+  val=$(echo "$val" | sed 's/[[:space:]]*$//')
+  echo "$val"
+}
+
 # Extract test/lint/typecheck command prefixes from workflow.yaml.
 # Caches results per session. Returns the cache file path.
 # Usage: cache_path=$(get_test_lint_commands "$session_id")
@@ -110,32 +139,6 @@ get_test_lint_commands() {
   fi
 
   local prefixes=""
-
-  # Helper: validate extracted command value.
-  # Strips leading whitespace, then checks non-empty and not a comment.
-  _is_valid_command() {
-    local val="$1"
-    val=$(printf '%s' "$val" | sed 's/^[[:space:]]*//')
-    [ -n "$val" ] && ! printf '%s' "$val" | grep -qE '^#'
-  }
-
-  # Helper: extract value after a YAML key, strip quotes and whitespace.
-  # Portable across macOS (BSD sed) and Linux (GNU sed).
-  _extract_yaml_value() {
-    local line="$1"
-    # Remove everything up to and including the key + colon
-    local val
-    val=$(echo "$line" | sed 's/^[^:]*:[[:space:]]*//')
-    # Strip surrounding quotes (single or double)
-    val=$(echo "$val" | sed 's/^["'"'"']//' | sed 's/["'"'"']$//')
-    # Extract prefix before {path} placeholder
-    val=$(echo "$val" | sed 's/[[:space:]]*{path}.*//')
-    # Strip trailing dot (e.g., "ruff check ." → "ruff check")
-    val=$(echo "$val" | sed 's/[[:space:]]*\.$//')
-    # Strip trailing whitespace
-    val=$(echo "$val" | sed 's/[[:space:]]*$//')
-    echo "$val"
-  }
 
   # Extract test.full command
   local test_full_line test_full
@@ -226,6 +229,48 @@ get_escalation_threshold() {
   echo "$value"
 }
 
+# Read checkpoint_staleness.threshold from workflow.yaml hooks config.
+# Returns the numeric value or empty string if not configured.
+# Callers should fall back to env var or default.
+get_staleness_threshold() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local value
+  value=$(grep -A10 'checkpoint_staleness:' "$yaml_path" 2>/dev/null \
+    | grep '[[:space:]]*threshold:' | head -1 \
+    | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*$//' || true)
+  echo "$value"
+}
+
+# Read checkpoint_staleness.min_floor from workflow.yaml hooks config.
+# Returns the numeric value or empty string if not configured.
+# Callers should fall back to env var or default.
+get_staleness_min_floor() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local value
+  value=$(grep -A10 'checkpoint_staleness:' "$yaml_path" 2>/dev/null \
+    | grep '[[:space:]]*min_floor:' | head -1 \
+    | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*$//' || true)
+  echo "$value"
+}
+
+# Read branch_pattern from workflow.yaml commands config.
+# Returns the pattern string or empty string if not configured.
+# Callers should fall back to default "feature/*".
+get_branch_pattern() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local value
+  value=$(grep '[[:space:]]*branch_pattern:' "$yaml_path" 2>/dev/null | head -1 \
+    | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*$//' \
+    | sed 's/^["'"'"']//' | sed 's/["'"'"']$//' || true)
+  echo "$value"
+}
+
 # --- Exit code constants ---
 HOOK_ALLOW=0
 HOOK_BLOCK=2
@@ -265,18 +310,19 @@ _portable_hash() {
 
 # --- Escalation counter (temp file persistence) ---
 # Uses ${TMPDIR}/coding-workflows-{hook_name}-{hash} files.
-# Hash is derived from transcript_path to scope counters per session.
+# Hash is derived from scope_key (typically transcript_path or session_id)
+# to scope counters per session.
 #
-# Lifetime: counters are session-scoped via the transcript path hash.
+# Lifetime: counters are session-scoped via the scope key hash.
 # They persist in $TMPDIR (or /tmp) across process restarts within the
 # same Claude Code session. They are NOT cleaned up automatically --
 # files are small (<10 bytes) and become inert when a new session starts
-# (new transcript path → new hash → new counter file).
+# (new scope key → new hash → new counter file).
 # Old counter files are harmless and will be removed by OS tmpfile cleanup.
 _counter_file() {
-  local hook_name="$1" transcript_path="$2"
+  local hook_name="$1" scope_key="$2"
   local hash
-  hash=$(echo -n "$transcript_path" | _portable_hash)
+  hash=$(echo -n "$scope_key" | _portable_hash)
   echo "${TMPDIR:-/tmp}/coding-workflows-${hook_name}-${hash}"
 }
 
@@ -402,6 +448,88 @@ get_dependency_check_allowlist() {
   yaml_path=$(find_workflow_yaml)
   [ -z "$yaml_path" ] && return 0
   read_yaml_array "$yaml_path" "check_dependency_version" "allowlist"
+}
+
+# --- Pre-push verification config readers ---
+
+# Get pre-push verification mode from workflow.yaml.
+# Returns "block" (default) or "warn".
+get_pre_push_mode() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo "block"; return 0; }
+  local value
+  value=$(grep -A10 'pre_push_verification:' "$yaml_path" 2>/dev/null \
+    | grep '[[:space:]]*mode:' | head -1 \
+    | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*$//' \
+    | tr '[:upper:]' '[:lower:]' || true)
+  if [ "$value" = "warn" ]; then echo "warn"; else echo "block"; fi
+}
+
+# Get pre-push staleness threshold from workflow.yaml.
+# Returns numeric minutes or empty string (callers default to 30).
+get_pre_push_staleness_threshold() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local value
+  value=$(grep -A10 'pre_push_verification:' "$yaml_path" 2>/dev/null \
+    | grep '[[:space:]]*staleness_threshold_minutes:' | head -1 \
+    | sed 's/^[^:]*:[[:space:]]*//' | sed 's/[[:space:]]*$//' || true)
+  echo "$value"
+}
+
+# --- Individual command getters ---
+# Extract specific command values from workflow.yaml.
+# These complement get_test_lint_commands / is_test_or_lint_command
+# (which serve the evidence logger's fast-path matching).
+
+# Get commands.test.full value from workflow.yaml.
+# Returns the command string or empty string if not configured.
+get_test_command() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local test_full_line test_full
+  test_full_line=$(grep -A5 '^[[:space:]]*test:' "$yaml_path" 2>/dev/null | grep '[[:space:]]*full:' | head -1 || true)
+  test_full=$(_extract_yaml_value "$test_full_line")
+  if _is_valid_command "$test_full"; then
+    echo "$test_full"
+  else
+    echo ""
+  fi
+}
+
+# Get commands.lint value from workflow.yaml.
+# Returns the command string or empty string if not configured.
+get_lint_command() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local lint_line lint_cmd
+  lint_line=$(grep '^[[:space:]]*lint:' "$yaml_path" 2>/dev/null | head -1 || true)
+  lint_cmd=$(_extract_yaml_value "$lint_line")
+  if _is_valid_command "$lint_cmd"; then
+    echo "$lint_cmd"
+  else
+    echo ""
+  fi
+}
+
+# Get commands.typecheck value from workflow.yaml.
+# Returns the command string or empty string if not configured.
+get_typecheck_command() {
+  local yaml_path
+  yaml_path=$(find_workflow_yaml)
+  [ -z "$yaml_path" ] && { echo ""; return 0; }
+  local typecheck_line typecheck_cmd
+  typecheck_line=$(grep '^[[:space:]]*typecheck:' "$yaml_path" 2>/dev/null | head -1 || true)
+  typecheck_cmd=$(_extract_yaml_value "$typecheck_line")
+  if _is_valid_command "$typecheck_cmd"; then
+    echo "$typecheck_cmd"
+  else
+    echo ""
+  fi
 }
 
 # Get dependency check package manager filter from workflow.yaml.

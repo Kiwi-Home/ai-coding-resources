@@ -152,7 +152,9 @@ Hooks activate on install — no configuration needed.
 | Hook | Event | Behaviour |
 |------|-------|-----------|
 | `check-dependency-version` | PreToolUse | Warns when dependency-add commands lack version pins |
+| `pre-push-verification` | PreToolUse | Blocks git push without passing test/lint evidence |
 | `test-evidence-logger` | PostToolUse | Logs test/lint evidence to session trail |
+| `checkpoint-staleness` | PostToolUse | Prompts session checkpoints during extended execute-issue work |
 | `deferred-work-scanner` | PostToolUse | Scans PR body for untracked deferrals |
 | `stop-deferred-work-check` | Stop | Warns about deferred work without follow-up issues |
 | `execute-issue-completion-gate` | Stop | Prevents premature exit with incomplete CI checks |

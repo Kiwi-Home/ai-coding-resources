@@ -91,7 +91,20 @@ Before invoking specialists, clearly state:
 
 **Specialists Needed:**
 - [Who and why]
+
+**Diagram Warranted:** [Yes / No]
 ```
+
+**Diagram evaluation:** Determine whether the subject warrants a Mermaid architecture diagram. Include a diagram when the subject involves component interactions, data flows, or state transitions. Skip for pure policy decisions, naming discussions, or other non-architectural topics.
+
+When a diagram is warranted, select the type that best matches the subject:
+
+| Subject Matter | Diagram Type |
+|----------------|-------------|
+| API calls, request/response flows, multi-step processes | `sequenceDiagram` |
+| Component relationships, module boundaries, system architecture | `graph TD` (component diagram) |
+| Decision logic, conditional branching, workflow routing | `flowchart TD` |
+| State machines, lifecycle management | `stateDiagram-v2` |
 
 ---
 
@@ -240,6 +253,13 @@ Produce ONE coherent output (not a transcript).
 ### Rationale
 [Why, including trade-offs]
 
+### Architecture Diagram
+<!-- Optional: include when the session subject involves component interactions,
+     data flows, or state transitions. Omit entirely for non-architectural topics. -->
+```mermaid
+[Diagram matching the subject — see diagram type guidance in Step 2]
+```
+
 ### Specialist Input
 | Specialist | Finding | Confidence |
 |------------|---------|------------|
@@ -275,6 +295,13 @@ Items that cross module/service/repo boundaries, require their own design, or ar
 
 ### What's Good
 - [Positive findings]
+
+### Architecture Diagram
+<!-- Optional: include when the review involves component interactions,
+     data flows, or state transitions. Omit entirely for non-architectural PRs. -->
+```mermaid
+[Diagram matching the subject — see diagram type guidance in Step 2]
+```
 
 ### Concerns
 | Concern | Severity | Specialist | Suggestion |

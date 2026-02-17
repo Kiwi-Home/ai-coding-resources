@@ -150,6 +150,12 @@ gh issue comment [NUMBER] --repo "{org}/{repo}" --body "## Session Checkpoint
 - [ ] PR creation"
 ```
 
+> **Automatic reminders:** The `checkpoint-staleness` hook tracks Bash tool call
+> volume during execute-issue sessions and prompts you to post a Session Checkpoint
+> when extended work periods pass without one (configurable via `hooks.checkpoint_staleness`
+> in workflow.yaml). When prompted, post a checkpoint immediately using the format above.
+> Posting a Session Checkpoint resets the staleness counter.
+
 ---
 
 ## Step 1: Read the Skill (MANDATORY)
@@ -197,6 +203,8 @@ This ensures plans are challenged before implementation, not during code review.
 > reading review feedback, NOT an exit condition. Do NOT stop after CI passes.
 
 After PR creation, you MUST enter the following loop. Do NOT stop after pushing.
+
+> **Note:** The `pre-push-verification` PreToolUse hook enforces the test/lint portion of the Verification Gate automatically. If evidence from the TDD loop and Verification Gate is fresh, the hook allows the push without re-running tests. If you skip the Verification Gate, the hook catches the gap and blocks the push. The hook checks for evidence matching the commands configured in `workflow.yaml`: `commands.test.full`, `commands.lint`, and `commands.typecheck`. If none of these are configured, the hook emits an advisory warning and allows the push.
 
 > **Note:** The `execute-issue-completion-gate` Stop hook enforces the CI portion of this loop automatically. Review verdict enforcement requires `review_gate: true` in workflow.yaml (under `hooks.execute_issue_completion_gate`).
 
